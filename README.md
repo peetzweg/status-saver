@@ -82,6 +82,41 @@ deploy/systemd/ # .service + .timer units, see deploy/INSTALL.md
 5. Always: `<...>.json` with `sender_jid`, `push_name`, `received_at`, `caption`, `mimetype`.
 6. `(msg_id, sender_jid)` gets a row in `index.db` — prevents double-processing.
 
+### Catching up on missed statuses
+
+Three delivery paths feed the same archive pipeline:
+
+1. **Live events** — a status post arrives over the open WebSocket while the
+   daemon is connected. Archived immediately. Primary path; cover it well and
+   the other two stop mattering.
+2. **Server offline replay** (`events.OfflineSyncPreview` / `OfflineSyncCompleted`)
+   — during short disconnects, the WhatsApp server buffers events and replays
+   them on reconnect. whatsmeow surfaces these through the normal
+   `events.Message` pipeline, so the StatusHandler picks them up with no
+   extra code. You'll see a log line like `server will replay events missed
+   during downtime messages=N`.
+3. **Phone-pushed history sync** (`events.HistorySync`) — the paired phone
+   proactively sends batches of historical conversation data, including
+   the `status@broadcast` conversation. `wa.HistorySyncHandler` walks those
+   blobs, calls `Client.ParseWebMessage` on each entry, and routes it
+   through the same StatusHandler (so dedup still applies).
+
+**Hard limits** — statuses can be lost despite all of the above:
+
+- **Statuses expire 24h after posting.** If a post is older than 24h by the
+  time any catch-up path runs, it's gone. Nothing can recover it.
+- **HistorySync is phone-driven.** It only arrives when the paired phone is
+  online and decides to push. A long daemon downtime while the phone is
+  offline or reluctant to sync will drop statuses.
+- **Server offline replay is short-term.** Empirically, disconnects measured
+  in minutes get replayed; hours may not.
+- **No `FetchStatuses` API exists.** There is no protocol call to ask the
+  server "give me every active status right now." Archiving is passive.
+
+Operational consequence: keep the daemon running 24/7. The catch-up paths
+are insurance, not a substitute. Any design that relies on "connect once
+per day to sweep up statuses" will drop data.
+
 ## Requirements
 
 - Linux server (tested on Ubuntu/Debian; systemd).

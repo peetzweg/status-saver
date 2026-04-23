@@ -94,6 +94,15 @@ func (c *Client) dispatch(evt interface{}) {
 		c.Log.Info().Msg("keepalive restored")
 	case *events.TemporaryBan:
 		c.Log.Error().Str("ban", v.String()).Msg("temporary ban from server")
+	case *events.OfflineSyncPreview:
+		c.Log.Info().
+			Int("total", v.Total).
+			Int("messages", v.Messages).
+			Int("notifications", v.Notifications).
+			Int("receipts", v.Receipts).
+			Msg("server will replay events missed during downtime")
+	case *events.OfflineSyncCompleted:
+		c.Log.Info().Int("count", v.Count).Msg("offline sync finished")
 	}
 	if extra != nil {
 		extra(evt)
