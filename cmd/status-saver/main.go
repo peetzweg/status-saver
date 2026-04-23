@@ -62,7 +62,7 @@ func run() int {
 		log.Error().Err(err).Msg("open index db")
 		return 2
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	c, err := wa.Open(rootCtx, cfg.SessionDB, log)
 	if err != nil {
@@ -206,5 +206,5 @@ func postLogoutAlert(webhook, jid string, log zerolog.Logger) {
 		log.Warn().Err(err).Msg("post alert webhook")
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }
