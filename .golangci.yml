@@ -1,0 +1,31 @@
+# golangci-lint config. Conservative default set — strict enough to catch
+# real issues, quiet enough to not block routine work.
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - govet
+    - gofmt
+    - goimports
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+
+issues:
+  # The user's local clone of whatsmeow sits at repo root; it has its own
+  # go.mod so Go itself ignores it, but belt-and-suspenders exclude it here
+  # as well in case the linter's typechecker tries to resolve imports.
+  exclude-dirs:
+    - whatsmeow
+    - tmp
+  exclude-rules:
+    # Test code routinely ignores Close() errors on tmp resources; not worth
+    # the noise to wrap every defer.
+    - path: _test\.go
+      linters:
+        - errcheck

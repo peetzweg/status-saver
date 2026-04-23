@@ -75,7 +75,10 @@ func TestMetricsDisconnectedGauge(t *testing.T) {
 	r := New()
 	srv := httptest.NewServer(r.Handler(func() bool { return false }))
 	defer srv.Close()
-	resp, _ := srv.Client().Get(srv.URL + "/metrics")
+	resp, err := srv.Client().Get(srv.URL + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	buf := make([]byte, 2048)
 	n, _ := resp.Body.Read(buf)
