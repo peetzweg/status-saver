@@ -436,10 +436,55 @@ account (see the smoke test below).
   `RestartPreventExitStatus=1`, so systemd will **not** restart the
   daemon — re-pairing is a deliberate manual step.
 
-## License / provenance
+## Releases & contributing
 
-Built on the [whatsmeow](https://github.com/tulir/whatsmeow) client
-(MPL-2.0). Status broadcast handling is inspired by
-[mautrix-whatsapp](https://github.com/mautrix/whatsapp) (same author,
-AGPL-3.0). Project licence not yet set — at minimum MPL-2.0 is required
-for any public release because of the whatsmeow dependency.
+### Installing a release
+
+Tagged releases ship as a single tarball on the GitHub Releases page
+containing all three binaries plus the systemd units, example config,
+INSTALL.md, and LICENSE. Download `status-saver_<version>_linux_amd64.tar.gz`,
+verify against `checksums.txt`, extract, and follow `deploy/INSTALL.md`.
+
+Only Linux amd64 is built for 0.x releases. For other platforms (macOS,
+Linux arm64), build from source as described above — `go build` handles
+both natively when CGO is available.
+
+### How releases are cut (for maintainers)
+
+This repo uses the same bot-driven flow as Changesets in the TS world,
+adapted to Go's ecosystem:
+
+1. **Contributors open PRs with conventional-commit titles**:
+   `feat(wa): add foo`, `fix(storage): bar`, `docs: baz`, etc.
+   The `PR title` check blocks merge if the title doesn't parse.
+2. **On every push to `main`**, `release-please` maintains a rolling
+   **Release PR** titled `chore(main): release X.Y.Z`. Its diff shows
+   the CHANGELOG entries that would ship and the version bump.
+3. **Merge the Release PR** when you're ready to cut. release-please
+   then creates a git tag (`vX.Y.Z`) + empty GitHub Release.
+4. **goreleaser fires on the same workflow run**, builds the binaries,
+   packages the tarball, and uploads it + a `checksums.txt` as release
+   assets.
+
+Version bumping follows semver with pre-1.0 conventions:
+
+- `feat:` → minor bump (0.1.0 → 0.2.0)
+- `fix:` → patch bump (0.1.0 → 0.1.1)
+- `chore:` / `docs:` / `test:` / `ci:` / `refactor:` → no bump, included
+  in the changelog "Other changes" section
+
+### Commit message reference
+
+Format: `<type>(<optional-scope>): <short subject>`. Body is optional.
+A `BREAKING CHANGE:` footer forces a major bump (once we're past 1.0.0).
+Recognized types are defined in
+[`.github/workflows/pr-title.yml`](./.github/workflows/pr-title.yml).
+
+## License
+
+Mozilla Public License 2.0 — see [`LICENSE`](./LICENSE).
+
+This repo uses [whatsmeow](https://github.com/tulir/whatsmeow) (MPL-2.0)
+and is inspired by [mautrix-whatsapp](https://github.com/mautrix/whatsapp)
+(same author, AGPL-3.0). MPL-2.0 is the minimum required because of the
+whatsmeow dependency.
