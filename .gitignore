@@ -15,6 +15,7 @@
 *.db-wal
 /data/
 /state/
+/tmp/
 
 # Local config (only the example is committed)
 config.yaml
