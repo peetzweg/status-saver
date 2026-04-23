@@ -25,26 +25,28 @@ through CGO. Without it, `go build` fails with `C compiler "gcc" not found`.
 
 ## Build
 
-All three binaries need the package path explicitly — the repo root has no
-`main.go`, each command lives under `cmd/<name>/`:
-
 ```
 git clone https://github.com/peetzweg/status-saver /root/git/status-saver
 cd /root/git/status-saver
 
-CGO_ENABLED=1 go build -o bin/status-saver        ./cmd/status-saver
-CGO_ENABLED=1 go build -o bin/status-saver-pair   ./cmd/status-saver-pair
-CGO_ENABLED=1 go build -o bin/status-saver-rotate ./cmd/status-saver-rotate
+make build    # builds all three binaries into ./bin/
 ```
 
-**Common error:** `no Go files in <dir>` means you forgot the trailing
-`./cmd/<name>` argument — it's the package to build, not the output name.
+Under the hood that runs `CGO_ENABLED=1 go build -o bin/ ./cmd/...`, which
+produces `bin/status-saver`, `bin/status-saver-pair`, `bin/status-saver-rotate`
+in one shot. `make install` puts them in `$GOBIN` (usually `~/go/bin`)
+instead, if you'd rather skip the `/usr/local/bin` install step below.
 
 Verify the binaries work:
 
 ```
-./bin/status-saver --help     # prints the -config flag
+./bin/status-saver --help
 ```
+
+**Troubleshooting**: if you run `go build` directly without arguments and
+get `no Go files in <dir>`, you skipped the package path. The root has no
+`main.go`; each command lives under `cmd/<name>/`. Either use `make build`
+or include the path: `go build -o bin/ ./cmd/...`.
 
 ## Install (systemd)
 
@@ -126,9 +128,7 @@ Xcode CLT gives you `cc`, which the CGO compile needs.
 Same as Linux:
 
 ```
-CGO_ENABLED=1 go build -o bin/status-saver        ./cmd/status-saver
-CGO_ENABLED=1 go build -o bin/status-saver-pair   ./cmd/status-saver-pair
-CGO_ENABLED=1 go build -o bin/status-saver-rotate ./cmd/status-saver-rotate
+make build
 ```
 
 ### Install as a launchd user agent
