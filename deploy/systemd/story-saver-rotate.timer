@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily rotation for story-saver archives
+
+[Timer]
+# Fire at 04:00 local time every day. Persistent=true means that if the host
+# was off at 04:00 the job runs on next boot.
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+AccuracySec=5m
+
+[Install]
+WantedBy=timers.target

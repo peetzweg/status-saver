@@ -1,0 +1,22 @@
+[Unit]
+Description=story-saver retention rotation
+Documentation=https://github.com/ppoloczek/story-saver
+
+[Service]
+Type=oneshot
+User=story-saver
+Group=story-saver
+ExecStart=/usr/local/bin/story-saver-rotate --config /etc/story-saver/config.yaml
+
+StateDirectory=story-saver
+StateDirectoryMode=0750
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/story-saver
