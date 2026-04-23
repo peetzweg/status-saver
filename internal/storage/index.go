@@ -26,7 +26,7 @@ func OpenIndex(path string) (*Index, error) {
 		);
 		CREATE INDEX IF NOT EXISTS idx_seen_received_at ON seen_messages(received_at);
 	`); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
 	return &Index{db: db}, nil

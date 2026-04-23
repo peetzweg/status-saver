@@ -29,7 +29,7 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("open index db")
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	if err := rotate.Run(rotate.Options{
 		DataDir:       cfg.DataDir,
