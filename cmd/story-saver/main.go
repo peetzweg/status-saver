@@ -56,9 +56,11 @@ func main() {
 		log.Fatal().Msg("no paired session found — run story-saver-pair first")
 	}
 
-	handler := wa.NewStatusHandler(c.WA, cfg.DataDir, idx, log)
+	statusHandler := wa.NewStatusHandler(c.WA, cfg.DataDir, idx, log)
+	historyHandler := wa.NewHistorySyncHandler(c.WA, statusHandler, log)
 	c.SetMessageHandler(func(evt interface{}) {
-		handler.Handle(rootCtx, evt)
+		statusHandler.Handle(rootCtx, evt)
+		historyHandler.Handle(rootCtx, evt)
 	})
 
 	if err := c.WA.Connect(); err != nil {
