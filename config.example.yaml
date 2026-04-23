@@ -1,0 +1,26 @@
+# story-saver configuration
+# Copy to /etc/story-saver/config.yaml (or pass --config) and adjust paths.
+
+# Where decrypted status media and metadata JSON files are written.
+data_dir: /var/lib/story-saver/data
+
+# whatsmeow device-store SQLite DB (created by story-saver-pair on first pairing).
+session_db: /var/lib/story-saver/session.db
+
+# Dedup index — tracks seen status messages so restarts are idempotent.
+index_db: /var/lib/story-saver/index.db
+
+# Days to keep archived status data. 0 = keep forever.
+retention_days: 90
+
+# Hour of day (local time) the rotate timer runs. Informational here; the actual
+# schedule lives in the systemd timer unit.
+rotation_hour: 4
+
+# zerolog level: trace|debug|info|warn|error
+log_level: info
+
+# Optional: POST to this URL when the daemon exits because the WhatsApp session
+# was logged out (e.g. device removed from the phone). Useful for ntfy.sh/Slack
+# alerts. Empty = disabled.
+alert_webhook: ""
