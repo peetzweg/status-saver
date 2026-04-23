@@ -84,43 +84,53 @@ deploy/systemd/ # .service + .timer units, see deploy/INSTALL.md
 
 ### Catching up on missed statuses
 
-Four delivery paths feed the same archive pipeline:
+**Bottom line: the only reliable way to archive every status is to never be
+offline when one is posted.** Every "catch-up" path below is best-effort and
+each has been empirically observed to fail. If the daemon is down for N
+minutes, expect to lose whatever statuses arrived in those N minutes.
 
-1. **Live events** — a status post arrives over the open WebSocket while the
-   daemon is connected. Archived immediately. Primary path; cover it well and
-   the other three stop mattering.
+Four opportunistic delivery paths feed the archive pipeline:
+
+1. **Live events** — status arrives over the open WebSocket while the
+   daemon is connected. Archived immediately. The **only path that works
+   deterministically.**
 2. **Server offline replay** (`events.OfflineSyncPreview` / `OfflineSyncCompleted`)
-   — during short disconnects, the WhatsApp server buffers events and replays
-   them on reconnect. whatsmeow surfaces these through the normal
-   `events.Message` pipeline, so the StatusHandler picks them up with no
-   extra code. Watch for `server will replay events missed during downtime
-   messages=N`.
-3. **On-demand history request** (new) — 5 seconds after startup the daemon
-   sends a peer-message `HistorySyncOnDemand` request to the phone, asking
-   for the last 50 status posts. Response arrives as `events.HistorySync`
-   with `type=ON_DEMAND`. This catches statuses posted while the daemon
-   was down. Requires the phone to be online.
-4. **Phone-pushed history sync** (`events.HistorySync`) — the paired phone
-   also proactively sends batches of historical conversation data at its
-   own discretion, typically on first-pair or occasional reconnects. Same
-   handler, same archive path, dedup via `index.db` keeps it idempotent.
+   — during short disconnects the server buffers events for us and replays
+   them on reconnect. Works for direct/group messages. Empirically
+   **observed to report `count=0` for status@broadcast** — the server
+   doesn't seem to queue statuses for offline replay.
+3. **Phone-pushed history sync** (`events.HistorySync`) — the phone may
+   proactively push historical conversation batches on first-pair or
+   subsequent reconnects. `INITIAL_STATUS_V3` history-sync type covers
+   statuses. In practice the phone only sends this on first pairing, not
+   on subsequent daemon restarts.
+4. **On-demand peer request** — 5 seconds after connect, the daemon sends
+   a `HistorySyncOnDemand` peer message to the phone asking for the last
+   50 status posts. The phone ACKs the peer message but frequently sends
+   no response. Requires the phone to be online and willing.
 
-**Hard limits** — statuses can still be lost despite all of the above:
+**Why this is such a mess:** WhatsApp Desktop can fully quit, have statuses
+post during its downtime, then reopen and display them — so a server-driven
+mechanism exists. But none of the open-source WhatsApp libraries
+(whatsmeow, Baileys, whatsapp-web.js, mautrix-whatsapp) have reverse-engineered
+it. The gap is tracked at
+[whatsmeow Discussion #1033](https://github.com/tulir/whatsmeow/discussions/1033)
+("Full History Sync on reconnection") — filed and unanswered by maintainers.
+Fixing this would take packet-capturing WhatsApp Web/Desktop traffic, which
+is a substantial side project.
 
-- **Statuses expire 24h after posting.** If a post is older than 24h when
-  the daemon asks for it, it's gone. Nothing can recover it.
-- **Phone has to be online** for paths 3 and 4. The on-demand request is a
-  peer message to your device; if the phone is powered off or without
-  network, it can't respond.
-- **Server offline replay is short-term.** Empirically, disconnects measured
-  in minutes get replayed; hours may not.
-- **No synchronous "active statuses" API.** The on-demand request asks the
-  phone, not the server — so you're bounded by what the phone has in its
-  local cache, and timing depends on how quickly it responds.
+**Operational consequences:**
 
-Operational consequence: keep the daemon running 24/7. The catch-up paths
-are insurance that works best for short gaps (minutes to a few hours).
-Long downtimes will still lose data.
+- **Run the daemon 24/7.** Every other recommendation is downstream of this.
+- Minimize restart windows. Plan deploys to coincide with times your
+  contacts don't typically post (very early morning).
+- Statuses expire 24h after posting; a long outage (hours) loses everything
+  posted in that window with no recovery path.
+- The on-demand peer request is logged as best-effort. Don't count on it.
+
+If you discover the actual IQ / notification that WhatsApp Web uses,
+please open an issue or PR — both against this repo and upstream at
+whatsmeow. Would be a genuinely useful contribution to the ecosystem.
 
 ## Requirements
 

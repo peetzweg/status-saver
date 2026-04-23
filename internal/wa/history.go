@@ -90,9 +90,17 @@ func (h *HistorySyncHandler) Handle(ctx context.Context, evt interface{}) {
 // asynchronously as an *events.HistorySync with SyncType=ON_DEMAND; our
 // HistorySyncHandler picks it up through the normal event bus.
 //
-// Requires the phone to be online and willing to respond. There's no
-// synchronous success signal — watch the logs for "history sync received
-// type=ON_DEMAND" shortly after.
+// IMPORTANT: this is best-effort and unreliable. It requires the phone to be
+// online AND cooperative, which defeats the point of running headless on a
+// server. In practice the phone often ACKs the peer message but sends no
+// HistorySync response. Kept because it occasionally works and has no cost
+// when it doesn't, but it is NOT a reliable gap-fill for missed statuses.
+//
+// Context: WhatsApp Desktop shows prior-posted statuses after being fully
+// quit, implying a server-driven mechanism that none of the open-source
+// libraries (whatsmeow, Baileys, whatsapp-web.js) have reverse-engineered.
+// See https://github.com/tulir/whatsmeow/discussions/1033 — filed, unanswered.
+// The only reliable strategy for story-saver is 24/7 daemon uptime.
 func (c *Client) RequestRecentStatuses(ctx context.Context, count int) error {
 	// Anchor: status@broadcast chat, "now" as the upper boundary. The phone
 	// interprets this as "give me the last `count` status messages older
@@ -113,6 +121,6 @@ func (c *Client) RequestRecentStatuses(ctx context.Context, count int) error {
 	c.Log.Info().
 		Str("req_id", resp.ID).
 		Int("count", count).
-		Msg("requested recent status history from phone — response will arrive as HistorySync event")
+		Msg("best-effort status backfill request sent to phone — may not produce any response")
 	return nil
 }
