@@ -2,6 +2,8 @@ package wa
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/rs/zerolog"
 	"go.mau.fi/whatsmeow"
@@ -81,4 +83,36 @@ func (h *HistorySyncHandler) Handle(ctx context.Context, evt interface{}) {
 			Int("routed_to_handler", replayed).
 			Msg("processed status broadcasts from history sync")
 	}
+}
+
+// RequestRecentStatuses asks the primary device (the phone) to push back the
+// last `count` status posts via an ON_DEMAND HistorySync. Response arrives
+// asynchronously as an *events.HistorySync with SyncType=ON_DEMAND; our
+// HistorySyncHandler picks it up through the normal event bus.
+//
+// Requires the phone to be online and willing to respond. There's no
+// synchronous success signal — watch the logs for "history sync received
+// type=ON_DEMAND" shortly after.
+func (c *Client) RequestRecentStatuses(ctx context.Context, count int) error {
+	// Anchor: status@broadcast chat, "now" as the upper boundary. The phone
+	// interprets this as "give me the last `count` status messages older
+	// than now". OldestMsgID is intentionally empty — we haven't anchored
+	// on any particular message.
+	anchor := &types.MessageInfo{
+		MessageSource: types.MessageSource{
+			Chat:     types.StatusBroadcastJID,
+			IsFromMe: false,
+		},
+		Timestamp: time.Now(),
+	}
+	msg := c.WA.BuildHistorySyncRequest(anchor, count)
+	resp, err := c.WA.SendPeerMessage(ctx, msg)
+	if err != nil {
+		return fmt.Errorf("send history-sync request: %w", err)
+	}
+	c.Log.Info().
+		Str("req_id", resp.ID).
+		Int("count", count).
+		Msg("requested recent status history from phone — response will arrive as HistorySync event")
+	return nil
 }

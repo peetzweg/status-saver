@@ -84,38 +84,43 @@ deploy/systemd/ # .service + .timer units, see deploy/INSTALL.md
 
 ### Catching up on missed statuses
 
-Three delivery paths feed the same archive pipeline:
+Four delivery paths feed the same archive pipeline:
 
 1. **Live events** — a status post arrives over the open WebSocket while the
    daemon is connected. Archived immediately. Primary path; cover it well and
-   the other two stop mattering.
+   the other three stop mattering.
 2. **Server offline replay** (`events.OfflineSyncPreview` / `OfflineSyncCompleted`)
    — during short disconnects, the WhatsApp server buffers events and replays
    them on reconnect. whatsmeow surfaces these through the normal
    `events.Message` pipeline, so the StatusHandler picks them up with no
-   extra code. You'll see a log line like `server will replay events missed
-   during downtime messages=N`.
-3. **Phone-pushed history sync** (`events.HistorySync`) — the paired phone
-   proactively sends batches of historical conversation data, including
-   the `status@broadcast` conversation. `wa.HistorySyncHandler` walks those
-   blobs, calls `Client.ParseWebMessage` on each entry, and routes it
-   through the same StatusHandler (so dedup still applies).
+   extra code. Watch for `server will replay events missed during downtime
+   messages=N`.
+3. **On-demand history request** (new) — 5 seconds after startup the daemon
+   sends a peer-message `HistorySyncOnDemand` request to the phone, asking
+   for the last 50 status posts. Response arrives as `events.HistorySync`
+   with `type=ON_DEMAND`. This catches statuses posted while the daemon
+   was down. Requires the phone to be online.
+4. **Phone-pushed history sync** (`events.HistorySync`) — the paired phone
+   also proactively sends batches of historical conversation data at its
+   own discretion, typically on first-pair or occasional reconnects. Same
+   handler, same archive path, dedup via `index.db` keeps it idempotent.
 
-**Hard limits** — statuses can be lost despite all of the above:
+**Hard limits** — statuses can still be lost despite all of the above:
 
-- **Statuses expire 24h after posting.** If a post is older than 24h by the
-  time any catch-up path runs, it's gone. Nothing can recover it.
-- **HistorySync is phone-driven.** It only arrives when the paired phone is
-  online and decides to push. A long daemon downtime while the phone is
-  offline or reluctant to sync will drop statuses.
+- **Statuses expire 24h after posting.** If a post is older than 24h when
+  the daemon asks for it, it's gone. Nothing can recover it.
+- **Phone has to be online** for paths 3 and 4. The on-demand request is a
+  peer message to your device; if the phone is powered off or without
+  network, it can't respond.
 - **Server offline replay is short-term.** Empirically, disconnects measured
   in minutes get replayed; hours may not.
-- **No `FetchStatuses` API exists.** There is no protocol call to ask the
-  server "give me every active status right now." Archiving is passive.
+- **No synchronous "active statuses" API.** The on-demand request asks the
+  phone, not the server — so you're bounded by what the phone has in its
+  local cache, and timing depends on how quickly it responds.
 
 Operational consequence: keep the daemon running 24/7. The catch-up paths
-are insurance, not a substitute. Any design that relies on "connect once
-per day to sweep up statuses" will drop data.
+are insurance that works best for short gaps (minutes to a few hours).
+Long downtimes will still lose data.
 
 ## Requirements
 
