@@ -24,6 +24,9 @@ type Client struct {
 
 	LoggedOut chan struct{}
 	once      sync.Once
+
+	extraMu sync.RWMutex
+	extra   func(evt interface{})
 }
 
 // Open prepares the session store and creates (but does not connect) the
@@ -67,17 +70,16 @@ func (c *Client) Close() {
 	}
 }
 
-// extraHandler is an optional second-stage event handler installed by the
-// daemon to process messages. Kept here so the client package owns the
-// event-dispatch entry point and the status package stays focused on logic.
-type extraHandler func(evt interface{})
-
-var extra extraHandler
-
-// SetMessageHandler registers the function that will receive every raw event
-// from whatsmeow (after we've processed connection lifecycle events). Called
-// once on startup by the daemon.
-func (c *Client) SetMessageHandler(h extraHandler) { extra = h }
+// SetMessageHandler registers a function that receives every raw event from
+// whatsmeow (after we've processed connection lifecycle events in dispatch).
+// Intended to be called once on startup by the daemon. Safe to call
+// concurrently with dispatch thanks to the RWMutex, though in practice it's
+// only called before Connect().
+func (c *Client) SetMessageHandler(h func(evt interface{})) {
+	c.extraMu.Lock()
+	defer c.extraMu.Unlock()
+	c.extra = h
+}
 
 func (c *Client) dispatch(evt interface{}) {
 	switch v := evt.(type) {
@@ -104,7 +106,10 @@ func (c *Client) dispatch(evt interface{}) {
 	case *events.OfflineSyncCompleted:
 		c.Log.Info().Int("count", v.Count).Msg("offline sync finished")
 	}
-	if extra != nil {
-		extra(evt)
+	c.extraMu.RLock()
+	h := c.extra
+	c.extraMu.RUnlock()
+	if h != nil {
+		h(evt)
 	}
 }
