@@ -111,7 +111,7 @@ func (h *StatusHandler) archive(ctx context.Context, evt *events.Message) {
 		text := textOf(evt.Message)
 		meta.Text = text
 		txtPath := base + ".txt"
-		if err := os.WriteFile(txtPath, []byte(text), 0o640); err != nil {
+		if err := storage.AtomicWriteFile(txtPath, []byte(text), 0o640); err != nil {
 			log.Error().Err(err).Msg("write text failed")
 			return
 		}
@@ -196,7 +196,7 @@ func (h *StatusHandler) save(ctx context.Context, m whatsmeow.DownloadableMessag
 	if err != nil {
 		return "", fmt.Errorf("download: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o640); err != nil {
+	if err := storage.AtomicWriteFile(path, data, 0o640); err != nil {
 		return "", fmt.Errorf("write %s: %w", path, err)
 	}
 	return path, nil
