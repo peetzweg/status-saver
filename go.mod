@@ -1,4 +1,4 @@
-module github.com/ppoloczek/story-saver
+module github.com/ppoloczek/status-saver
 
 go 1.25.0
 

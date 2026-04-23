@@ -1,6 +1,6 @@
-// Command story-saver is the long-running daemon that listens for incoming
+// Command status-saver is the long-running daemon that listens for incoming
 // WhatsApp status@broadcast messages and archives them to disk. Expects a
-// session already paired via story-saver-pair.
+// session already paired via status-saver-pair.
 package main
 
 import (
@@ -16,10 +16,10 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/ppoloczek/story-saver/internal/config"
-	"github.com/ppoloczek/story-saver/internal/logging"
-	"github.com/ppoloczek/story-saver/internal/storage"
-	"github.com/ppoloczek/story-saver/internal/wa"
+	"github.com/ppoloczek/status-saver/internal/config"
+	"github.com/ppoloczek/status-saver/internal/logging"
+	"github.com/ppoloczek/status-saver/internal/storage"
+	"github.com/ppoloczek/status-saver/internal/wa"
 )
 
 // recentStatusRequestCount is how many status posts we ask the phone to
@@ -28,7 +28,7 @@ import (
 const recentStatusRequestCount = 50
 
 func main() {
-	configPath := flag.String("config", "/etc/story-saver/config.yaml", "path to YAML config")
+	configPath := flag.String("config", "/etc/status-saver/config.yaml", "path to YAML config")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
@@ -58,7 +58,7 @@ func main() {
 	defer c.Close()
 
 	if !c.IsPaired() {
-		log.Fatal().Msg("no paired session found — run story-saver-pair first")
+		log.Fatal().Msg("no paired session found — run status-saver-pair first")
 	}
 
 	statusHandler := wa.NewStatusHandler(c.WA, cfg.DataDir, idx, log)
@@ -106,7 +106,7 @@ func postLogoutAlert(webhook, jid string, log zerolog.Logger) {
 	if webhook == "" {
 		return
 	}
-	body := fmt.Sprintf("story-saver: WhatsApp session for %s was logged out at %s",
+	body := fmt.Sprintf("status-saver: WhatsApp session for %s was logged out at %s",
 		jid, time.Now().Format(time.RFC3339))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

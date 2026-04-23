@@ -1,4 +1,4 @@
-// Command story-saver-rotate removes archived day-folders older than the
+// Command status-saver-rotate removes archived day-folders older than the
 // configured retention window and prunes the dedup index. Meant to be fired
 // from a systemd timer around 04:00 local time.
 package main
@@ -8,14 +8,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ppoloczek/story-saver/internal/config"
-	"github.com/ppoloczek/story-saver/internal/logging"
-	"github.com/ppoloczek/story-saver/internal/rotate"
-	"github.com/ppoloczek/story-saver/internal/storage"
+	"github.com/ppoloczek/status-saver/internal/config"
+	"github.com/ppoloczek/status-saver/internal/logging"
+	"github.com/ppoloczek/status-saver/internal/rotate"
+	"github.com/ppoloczek/status-saver/internal/storage"
 )
 
 func main() {
-	configPath := flag.String("config", "/etc/story-saver/config.yaml", "path to YAML config")
+	configPath := flag.String("config", "/etc/status-saver/config.yaml", "path to YAML config")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
