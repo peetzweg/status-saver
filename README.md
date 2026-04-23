@@ -1,95 +1,96 @@
 # story-saver
 
-Archiver-Daemon für WhatsApp-Status-Posts (24-h-Stories) von Kontakten.
-Läuft headless auf einem Linux-Server, loggt sich via Multi-Device einmalig
-mit einer dedizierten Zweitnummer ein und speichert danach jeden eingehenden
-Status-Broadcast (Foto, Video, Text + Captions) nach Disk.
+Archiver daemon for WhatsApp Status posts (the 24-hour story feature) from
+your contacts. Runs headless on a Linux server, pairs once via Multi-Device
+against a dedicated secondary WhatsApp account, and from then on stores every
+incoming status broadcast (photo, video, text + captions) to disk.
 
-> Status: alpha, persönliches Tool. Verwendet [whatsmeow](https://github.com/tulir/whatsmeow) —
-> eine inoffizielle Reimplementierung des WhatsApp-Multi-Device-Protokolls.
-> Das ist ein ToS-Grenzgänger: rein passives Lesen mit einer Zweitnummer ist
-> historisch niedrig-riskant, aber keine Garantie. Nicht mit deiner Primärnummer
-> verwenden.
+> Status: alpha, personal tool. Uses [whatsmeow](https://github.com/tulir/whatsmeow),
+> an unofficial reimplementation of the WhatsApp Multi-Device protocol. This is
+> a ToS grey area: passive read-only access from a secondary number has
+> historically been low-risk, but there is no guarantee. Do not use your
+> primary number with this.
 
 ---
 
-## Was macht das Tool
+## What it does
 
-WhatsApp sendet Status-Posts von Kontakten an alle Linked Devices der
-Beobachter:innen als normale verschlüsselte Messages — adressiert an die
-spezielle JID `status@broadcast`. `story-saver` hält eine dauerhafte
-Multi-Device-Session offen, filtert alle Nachrichten auf genau diese JID,
-entschlüsselt die Media-Attachments (AES-CBC/HMAC via whatsmeow) und
-schreibt sie nach Disk inkl. Metadaten-JSON.
+When a contact posts a status, WhatsApp delivers it to every linked device of
+every viewer as a normal end-to-end encrypted message — addressed to the
+special JID `status@broadcast`. `story-saver` keeps a persistent Multi-Device
+session open, filters every incoming message on that JID, decrypts any media
+attachments (AES-CBC/HMAC via whatsmeow), and writes everything to disk along
+with a metadata sidecar.
 
-Der persistente Daemon ist bewusst gewählt statt "1× am Tag um 4 Uhr
-connecten": WhatsApp garantiert nicht dokumentiert, wie lang Status-Offline-
-Backfill für ein gerade wieder verbundenes Gerät ist. Ein 24/7-Client fängt
-alles ab. Ein separater Timer um 04:00 kümmert sich nur ums Aufräumen.
+The persistent-daemon model is deliberate instead of "connect once a day at
+04:00": WhatsApp does not document how much status backfill a freshly
+reconnected client receives. A 24/7 client catches everything. A separate
+timer at 04:00 only does housekeeping.
 
-## Was das Tool **nicht** macht
+## What it does not do
 
-- Keine eigenen Status posten (wir sind reiner Leser).
-- Keine Chat-Nachrichten oder Gruppen-Messages archivieren — nur `status@broadcast`.
-- Kein Multi-Account (aktuell genau eine Zweitnummer).
-- Keine Web-UI zum Durchstöbern — Dateien liegen roh auf Disk.
-- Kein offizieller WhatsApp-Support (die Cloud-API kann Status gar nicht lesen).
+- It does not post your own statuses (purely a reader).
+- It does not archive chat messages or group messages — only `status@broadcast`.
+- No multi-account support (exactly one secondary number for now).
+- No web UI for browsing — files sit raw on disk.
+- No official WhatsApp support (the Cloud API can't read statuses at all).
 
-## Architektur
+## Architecture
 
 ```
- ┌─────────────────────────────────────────────────────┐
- │  story-saver daemon (systemd, 24/7)                 │
- │  ┌───────────────┐   ┌───────────────────────────┐  │
- │  │ whatsmeow     │──▶│ status message handler    │  │
- │  │ Client (MD)   │   │ (filter status@broadcast) │  │
- │  └───────┬───────┘   └──────────┬────────────────┘  │
- │          │                      ▼                    │
- │   session.db             downloader + writer        │
- │  (SQLite, whatsmeow)    ├─ media → disk             │
- │                         └─ metadata → index.db      │
- └─────────────────────────────────────────────────────┘
- ┌─────────────────────────────────────────────────────┐
- │  systemd timer 04:00 daily                          │
- │  └─ rotate: prune >retention_days, clean index      │
- └─────────────────────────────────────────────────────┘
+ +-----------------------------------------------------+
+ |  story-saver daemon (systemd, 24/7)                 |
+ |  +---------------+   +---------------------------+  |
+ |  | whatsmeow     |-->| status message handler    |  |
+ |  | Client (MD)   |   | (filter status@broadcast) |  |
+ |  +-------+-------+   +-------------+-------------+  |
+ |          |                         v                |
+ |   session.db              downloader + writer       |
+ |  (SQLite, whatsmeow)      |- media -> disk          |
+ |                           `- metadata -> index.db   |
+ +-----------------------------------------------------+
+ +-----------------------------------------------------+
+ |  systemd timer 04:00 daily                          |
+ |  `- rotate: prune >retention_days, clean index      |
+ +-----------------------------------------------------+
 ```
 
-### Paketlayout
+### Package layout
 
 ```
 cmd/
-├── story-saver/          # langlebiger Daemon
-├── story-saver-pair/     # interaktives QR-Pairing, läuft genau einmal
-└── story-saver-rotate/   # one-shot, vom systemd-Timer getriggert
+|-- story-saver/          # long-running daemon
+|-- story-saver-pair/     # interactive QR pairing, runs exactly once
+`-- story-saver-rotate/   # oneshot, triggered by the systemd timer
 
 internal/
-├── config/     # YAML-Loader + Validation
-├── logging/    # zerolog-Konsolenausgabe
-├── wa/         # whatsmeow-Client-Wrapper + status@broadcast-Handler
-├── storage/    # Disk-Pfad-Schema + SQLite-Dedup-Index
-└── rotate/     # Retention-Walker
+|-- config/     # YAML loader + validation
+|-- logging/    # zerolog console output
+|-- wa/         # whatsmeow client wrapper + status@broadcast handler
+|-- storage/    # on-disk path scheme + SQLite dedup index
+`-- rotate/     # retention walker
 
-deploy/systemd/ # .service + .timer Units, siehe deploy/INSTALL.md
+deploy/systemd/ # .service + .timer units, see deploy/INSTALL.md
 ```
 
-### Datenfluss für einen Status-Post
+### Data flow for one status post
 
-1. whatsmeow liefert `*events.Message` mit `Info.Chat == types.StatusBroadcastJID`.
-2. `wa.StatusHandler.archive()` prüft `index.db` auf Duplikat — Restarts sind idempotent.
-3. Für Media (Image/Video): `client.Download(ctx, msg)` → AES-entschlüsselt, schreibt in `<dataDir>/YYYY-MM-DD/<sender>/<HHMMSS>_<msgid>.<ext>`.
-4. Für Text-only: `<...>.txt` mit dem Plaintext.
-5. Immer: `<...>.json` mit `sender_jid`, `push_name`, `received_at`, `caption`, `mimetype`.
-6. `(msg_id, sender_jid)` als Row in `index.db` — verhindert Doppelverarbeitung.
+1. whatsmeow delivers `*events.Message` with `Info.Chat == types.StatusBroadcastJID`.
+2. `wa.StatusHandler.archive()` checks `index.db` for a duplicate — restarts are idempotent.
+3. For media (image/video): `client.Download(ctx, msg)` -> AES-decrypted bytes, written to `<dataDir>/YYYY-MM-DD/<sender>/<HHMMSS>_<msgid>.<ext>`.
+4. For text-only: `<...>.txt` with the plaintext.
+5. Always: `<...>.json` with `sender_jid`, `push_name`, `received_at`, `caption`, `mimetype`.
+6. `(msg_id, sender_jid)` gets a row in `index.db` — prevents double-processing.
 
-## Voraussetzungen
+## Requirements
 
-- Linux-Server (getestet auf Ubuntu/Debian; systemd).
+- Linux server (tested on Ubuntu/Debian; systemd).
 - Go 1.25+
-- C-Compiler (für `github.com/mattn/go-sqlite3` via CGO).
-- Ein WhatsApp-Zweit-Account auf einem Handy (zum Scannen des QR-Codes einmalig).
+- C compiler (required by `github.com/mattn/go-sqlite3` through CGO).
+- One dedicated secondary WhatsApp account on a phone (needed once to scan
+  the QR code).
 
-## Bauen
+## Building
 
 ```
 CGO_ENABLED=1 go build -o bin/story-saver        ./cmd/story-saver
@@ -97,78 +98,102 @@ CGO_ENABLED=1 go build -o bin/story-saver-pair   ./cmd/story-saver-pair
 CGO_ENABLED=1 go build -o bin/story-saver-rotate ./cmd/story-saver-rotate
 ```
 
-Warum CGO: der SQLite-Driver ist ein C-Binding. Alternativ `modernc.org/sqlite`
-(pure Go) — nicht eingebaut, leicht austauschbar falls CGO auf dem Zielsystem
-nicht geht.
+Why CGO: the SQLite driver is a C binding. If CGO is unavailable on the
+target host, swapping in `modernc.org/sqlite` (pure Go) is a small patch.
 
-## Konfigurieren
+## Configuring
 
 ```yaml
 # /etc/story-saver/config.yaml
 data_dir:       /var/lib/story-saver/data
 session_db:     /var/lib/story-saver/session.db
 index_db:       /var/lib/story-saver/index.db
-retention_days: 90        # 0 = nie löschen
-rotation_hour:  4         # informativ; Zeitplan steht im systemd-Timer
+retention_days: 90        # 0 = never delete
+rotation_hour:  4         # informational; the actual schedule lives in the timer
 log_level:      info      # trace|debug|info|warn|error
-alert_webhook:  ""        # optional: POST bei LoggedOut (ntfy.sh, Slack webhook, …)
+alert_webhook:  ""        # optional: POST on LoggedOut (ntfy.sh, Slack webhook, ...)
 ```
 
-Alle Pfade absolut. Parent-Ordner werden automatisch mit `0750` angelegt.
+All paths must be absolute. Parent directories are created automatically
+with mode `0750`.
 
-## Pairing (einmalig)
+## Pairing (one-off)
 
-Der Daemon startet nicht, solange kein Device gepaart ist. Pairing ist
-interaktiv (braucht dein Handy):
+The daemon will not start unless a device is paired. Pairing is interactive
+and needs your phone:
 
 ```
 sudo -u story-saver story-saver-pair --config /etc/story-saver/config.yaml
 ```
 
-Im Terminal erscheinen fortlaufend QR-Codes. Auf dem Zweit-Handy:
-**WhatsApp → Einstellungen → Verknüpfte Geräte → Gerät verknüpfen** → scannen.
-Nach erfolgreichem Scan beendet sich das Binary; `session.db` enthält danach
-die Keys.
+QR codes scroll by in the terminal. On the secondary phone:
+**WhatsApp -> Settings -> Linked Devices -> Link a Device** -> scan.
 
-Sessions bleiben Wochen bis Monate gültig. Erst bei Logout (du entfernst das
-Gerät in der App, Account-Ban, etc.) muss neu gepaart werden — der Daemon
-beendet sich dann mit Exit-Code 1.
+After the scan the binary logs
+`pair-success received; keeping connection open for post-pair handshake`
+and stays connected for a 30-second grace period. **Do not kill it during
+that window** — the phone app needs that time to complete app-state key
+sync and contact sync. If the binary exits earlier, the phone gets stuck
+on "pairing…" and the link is effectively broken.
 
-## Betrieb
+After the grace period it logs `pairing complete — session stored,
+disconnecting` and exits.
 
-### Via systemd (empfohlen)
+Sessions remain valid for weeks to months. You only need to re-pair if
+WhatsApp invalidates the session (you remove the device from the app,
+account ban, etc.) — the daemon exits with status 1 in that case.
 
-Siehe **`deploy/INSTALL.md`** — legt User, Binaries, Config, Service und Timer
-an. Kurzfassung:
+### Recovering from a half-broken pair
+
+If an earlier pair attempt exited too early (pre-fix, or network glitch,
+or the grace period was cut short), `session.db` will look "paired" but
+the phone never confirmed. Running `story-saver-pair` again will just
+print "already paired — pass --force to delete the session and re-pair".
+
+Force a fresh pair:
+
+```
+story-saver-pair --config ./config.yaml --force
+```
+
+`--force` deletes `session.db` and starts over. Scan the QR again.
+
+## Running
+
+### Via systemd (recommended)
+
+See **`deploy/INSTALL.md`** for the full setup: user, binaries, config,
+service, and timer. Short version:
 
 ```
 sudo systemctl enable --now story-saver.service
 sudo systemctl enable --now story-saver-rotate.timer
 ```
 
-### Manuell (Debugging)
+### Manually (for debugging)
 
 ```
 ./bin/story-saver --config ./config.yaml
 ```
 
-Stop mit `Ctrl-C`. Shutdown ist sauber (whatsmeow disconnect, SQLite flush).
+Stop with `Ctrl-C`. Shutdown is clean (whatsmeow disconnect, SQLite flush).
 
-## Datenformat auf Disk
+## On-disk data format
 
 ```
 /var/lib/story-saver/data/
-└── 2026-04-23/
-    └── PhilipP_4915112345678/          # <push_name>_<jid.user>
-        ├── 143012_3EB0A9B8C7D6E5F4.jpg
-        ├── 143012_3EB0A9B8C7D6E5F4.json
-        ├── 143155_3EB0F1E2D3C4B5A6.mp4
-        ├── 143155_3EB0F1E2D3C4B5A6.json
-        └── 164820_3EB012AB34CD56EF.txt   # text-only Status
-            164820_3EB012AB34CD56EF.json
+`-- 2026-04-23/
+    `-- PhilipP_4915112345678/          # <push_name>_<jid.user>
+        |-- 143012_3EB0A9B8C7D6E5F4.jpg
+        |-- 143012_3EB0A9B8C7D6E5F4.json
+        |-- 143155_3EB0F1E2D3C4B5A6.mp4
+        |-- 143155_3EB0F1E2D3C4B5A6.json
+        |-- 164820_3EB012AB34CD56EF.txt   # text-only status
+        `-- 164820_3EB012AB34CD56EF.json
 ```
 
-JSON-Sidecar-Schema (alle Felder optional außer `msg_id`, `sender_jid`, `received_at`):
+JSON sidecar schema (all fields optional except `msg_id`, `sender_jid`,
+`received_at`):
 
 ```json
 {
@@ -184,15 +209,14 @@ JSON-Sidecar-Schema (alle Felder optional außer `msg_id`, `sender_jid`, `receiv
 
 ## Retention
 
-Der Timer `story-saver-rotate.timer` ruft täglich 04:00 `story-saver-rotate`
-auf:
+The `story-saver-rotate.timer` unit calls `story-saver-rotate` daily at 04:00:
 
-1. Tagesordner mit `Name < heute - retention_days` werden komplett gelöscht.
-2. `seen_messages`-Rows mit `received_at < cutoff` werden aus `index.db` entfernt.
+1. Day folders whose name is older than `retention_days` are deleted entirely.
+2. `seen_messages` rows with `received_at < cutoff` are pruned from `index.db`.
 
-`retention_days: 0` schaltet das Pruning komplett aus.
+`retention_days: 0` disables pruning completely.
 
-Manuell auslösen:
+Trigger a run manually:
 
 ```
 sudo systemctl start story-saver-rotate.service
@@ -201,55 +225,61 @@ sudo systemctl start story-saver-rotate.service
 ## Observability
 
 ```
-journalctl -u story-saver -f              # Live-Log des Daemons
-journalctl -u story-saver-rotate -e       # letzte Rotation
-systemctl list-timers story-saver-rotate  # nächster Lauf
+journalctl -u story-saver -f              # live daemon log
+journalctl -u story-saver-rotate -e       # last rotation run
+systemctl list-timers story-saver-rotate  # next scheduled run
 ```
 
-Interessante Log-Felder (zerolog, Format `mod=wa` / `mod=status` / …):
+Interesting log fields (zerolog, with `mod=wa` / `mod=status` / ...):
 
-- `"status archived"` — ein neuer Post ist auf Disk
-- `"duplicate status, skipping"` — idempotent durch index.db
-- `"whatsapp disconnected (will auto-reconnect)"` — transient, kein Problem
-- `"whatsapp logged out — session invalid"` — terminal, Exit 1, Re-Pair nötig
+- `"status archived"` — a new post just landed on disk
+- `"duplicate status, skipping"` — dedup worked via index.db
+- `"whatsapp disconnected (will auto-reconnect)"` — transient, no action needed
+- `"whatsapp logged out — session invalid"` — terminal, exit 1, re-pair required
 
-## Entwicklung
+## Development
 
 ```
-go test ./...           # Storage- und Rotation-Unit-Tests
+go test ./...           # storage and rotation unit tests
 go vet ./...
 go build ./...
 ```
 
-Die `wa/`-Pakete haben keine Unit-Tests — das würde einen Fake-WhatsApp-Server
-voraussetzen. Stattdessen E2E gegen eine echte Zweitnummer (siehe Plan).
+The `wa/` package has no unit tests — testing it would require a fake
+WhatsApp server. Instead, validate end-to-end against a real secondary
+account (see the smoke test below).
 
-### E2E-Smoketest
+### E2E smoke test
 
-1. `story-saver-pair` → QR scannen mit Test-Handy.
-2. `story-saver` starten; warten bis `daemon started — awaiting status broadcasts`.
-3. Von einem dritten Account (dessen Nummer das Test-Handy kennt) einen Status posten — Foto mit Caption, Video, Text-only.
-4. In `data/<heute>/<poster>/` sollten innerhalb von ~30 s Media + `.json` erscheinen.
-5. Daemon killen, neu starten, nichts doppelt speichern (Dedup via `index.db`).
-6. Netzwerk kurz trennen (`iptables -A OUTPUT -p tcp --dport 443 -j DROP` für 60 s, dann `-D`) → whatsmeow reconnected automatisch.
+1. `story-saver-pair` → scan QR with the test phone.
+2. Start `story-saver`; wait for `daemon started — awaiting status broadcasts`.
+3. From a third account (whose number the test phone has saved) post a
+   status — an image with a caption, then a video, then a text-only post.
+4. Inside ~30s, `data/<today>/<poster>/` should contain the media files
+   plus their `.json` sidecars.
+5. Kill and restart the daemon; nothing gets stored twice (dedup via
+   `index.db`).
+6. Briefly drop the network (`iptables -A OUTPUT -p tcp --dport 443 -j DROP`
+   for 60s, then `-D`) → whatsmeow auto-reconnects.
 
-## Sicherheits- und Betriebshinweise
+## Security and operational notes
 
-- **Dedizierte Zweitnummer verwenden.** Passive Status-Reads sind historisch
-  unauffällig, aber jede Multi-Device-Session auf einem Server erhöht das
-  Ban-Risiko leicht.
-- `session.db` enthält die Geräte-Identität. Kompromittierung erlaubt
-  WhatsApp-Nachrichten im Namen des Zweit-Accounts zu senden. Rechte streng:
-  unit-File setzt `0640` und eigenen User.
-- Captions und Absenderzuordnung landen im Klartext auf Disk. Disk-Encryption
-  auf dem Server ist Pflicht.
-- Bei `events.LoggedOut` exit 1 — systemd restartet **nicht** (siehe
-  `RestartPreventExitStatus=1`). Re-Pair ist ein bewusster Schritt.
+- **Use a dedicated secondary number.** Passive status reads have been
+  historically quiet, but every Multi-Device session on a server raises
+  ban risk slightly.
+- `session.db` holds the device identity. A compromised file lets an
+  attacker send WhatsApp messages as your secondary account. The systemd
+  unit pins permissions to the dedicated user; keep the file mode tight.
+- Captions and sender attribution land in plaintext on disk. Full-disk
+  encryption on the server is a hard requirement.
+- On `events.LoggedOut` the daemon exits with status 1. The unit sets
+  `RestartPreventExitStatus=1`, so systemd will **not** restart the
+  daemon — re-pairing is a deliberate manual step.
 
-## Lizenz / Herkunft
+## License / provenance
 
-Code basiert auf dem [whatsmeow](https://github.com/tulir/whatsmeow)-Client
-(MPL-2.0). Status-Broadcast-Handling ist inspiriert von
-[mautrix-whatsapp](https://github.com/mautrix/whatsapp) (gleicher Autor, AGPL-3.0).
-Eigene Lizenz noch nicht gesetzt — bei Veröffentlichung mindestens MPL-2.0
-erforderlich wegen whatsmeow-Dependency.
+Built on the [whatsmeow](https://github.com/tulir/whatsmeow) client
+(MPL-2.0). Status broadcast handling is inspired by
+[mautrix-whatsapp](https://github.com/mautrix/whatsapp) (same author,
+AGPL-3.0). Project licence not yet set — at minimum MPL-2.0 is required
+for any public release because of the whatsmeow dependency.
