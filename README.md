@@ -225,13 +225,22 @@ whatsmeow. Would be a genuinely useful contribution to the ecosystem.
 ## Building
 
 ```
-CGO_ENABLED=1 go build -o bin/status-saver        ./cmd/status-saver
-CGO_ENABLED=1 go build -o bin/status-saver-pair   ./cmd/status-saver-pair
-CGO_ENABLED=1 go build -o bin/status-saver-rotate ./cmd/status-saver-rotate
+make build      # all three binaries into ./bin
+make test       # unit tests with race detector
+make lint       # gofmt + vet + golangci-lint (if installed)
+make help       # list all targets
 ```
 
-Why CGO: the SQLite driver is a C binding. If CGO is unavailable on the
-target host, swapping in `modernc.org/sqlite` (pure Go) is a small patch.
+Under the hood `make build` runs `CGO_ENABLED=1 go build -o bin/ ./cmd/...`
+which compiles every binary in one go. If you prefer raw Go commands or
+don't have `make` available, that one-liner works directly from the repo
+root — no need to invoke `go build` three times.
+
+Why CGO: the SQLite driver is a C binding (`mattn/go-sqlite3`). On
+Debian/Ubuntu, `apt install build-essential` gives you the `gcc` it needs.
+If CGO is unavailable on the target host, swapping in `modernc.org/sqlite`
+(pure Go) is a small patch — tracked at
+[issue #12](https://github.com/peetzweg/status-saver/issues/12).
 
 ## Configuring
 
