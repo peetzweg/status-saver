@@ -16,6 +16,7 @@ type Config struct {
 	RotationHour  int    `yaml:"rotation_hour"`
 	LogLevel      string `yaml:"log_level"`
 	AlertWebhook  string `yaml:"alert_webhook"`
+	MetricsAddr   string `yaml:"metrics_addr"`
 }
 
 func Load(path string) (*Config, error) {

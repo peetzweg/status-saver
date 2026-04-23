@@ -19,6 +19,7 @@ import (
 
 	"github.com/ppoloczek/status-saver/internal/config"
 	"github.com/ppoloczek/status-saver/internal/logging"
+	"github.com/ppoloczek/status-saver/internal/metrics"
 	"github.com/ppoloczek/status-saver/internal/storage"
 	"github.com/ppoloczek/status-saver/internal/wa"
 )
@@ -75,8 +76,20 @@ func run() int {
 		return 2
 	}
 
-	statusHandler := wa.NewStatusHandler(c.WA, cfg.DataDir, idx, log)
+	rec := metrics.New()
+	statusHandler := wa.NewStatusHandler(c.WA, cfg.DataDir, idx, log, rec)
 	historyHandler := wa.NewHistorySyncHandler(c.WA, statusHandler, log)
+
+	// Optional HTTP server for /health + /metrics. Disabled when
+	// metrics_addr is empty.
+	metricsSrv := startMetricsServer(cfg.MetricsAddr, rec, c.WA.IsConnected, log)
+	if metricsSrv != nil {
+		defer func() {
+			shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutCancel()
+			_ = metricsSrv.Shutdown(shutCtx)
+		}()
+	}
 
 	// Track in-flight handler invocations so shutdown can wait for them to
 	// finish (graceful drain) instead of yanking the rug mid-download.
@@ -149,6 +162,27 @@ func drainHandlers(wg *sync.WaitGroup, log zerolog.Logger) {
 			Dur("timeout", shutdownDrainTimeout).
 			Msg("handler drain timeout — a download was likely interrupted mid-flight (atomic writes keep disk consistent)")
 	}
+}
+
+// startMetricsServer launches a background HTTP listener exposing the
+// recorder's /health and /metrics endpoints. Returns the server so the
+// caller can Shutdown it gracefully, or nil when addr is empty.
+func startMetricsServer(addr string, rec *metrics.Recorder, connected func() bool, log zerolog.Logger) *http.Server {
+	if addr == "" {
+		return nil
+	}
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           rec.Handler(connected),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		log.Info().Str("addr", addr).Msg("metrics server listening")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Warn().Err(err).Msg("metrics server")
+		}
+	}()
+	return srv
 }
 
 // postLogoutAlert fires a best-effort POST to the configured webhook. Silent
