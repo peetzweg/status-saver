@@ -77,7 +77,7 @@ deploy/systemd/ # .service + .timer units, see deploy/INSTALL.md
 
 1. whatsmeow delivers `*events.Message` with `Info.Chat == types.StatusBroadcastJID`.
 2. `wa.StatusHandler.archive()` checks `index.db` for a duplicate — restarts are idempotent.
-3. For media (image/video): `client.Download(ctx, msg)` -> AES-decrypted bytes, written to `<dataDir>/YYYY-MM-DD/<sender>/<HHMMSS>_<msgid>.<ext>`.
+3. For media (image/video): `client.Download(ctx, msg)` -> AES-decrypted bytes, written to `<dataDir>/<sender>/<YYYY-MM-DD_HHMMSS>_<msgid>.<ext>`.
 4. For text-only: `<...>.txt` with the plaintext.
 5. Always: `<...>.json` with `sender_jid`, `push_name`, `received_at`, `caption`, `mimetype`.
 6. `(msg_id, sender_jid)` gets a row in `index.db` — prevents double-processing.
@@ -180,17 +180,23 @@ Stop with `Ctrl-C`. Shutdown is clean (whatsmeow disconnect, SQLite flush).
 
 ## On-disk data format
 
+Flat layout — one folder per contact, with the date/time baked into each
+filename so posts still sort chronologically within a contact.
+
 ```
 /var/lib/story-saver/data/
-`-- 2026-04-23/
-    `-- Alice_49123456789/          # <push_name>_<jid.user>
-        |-- 143012_3EB0A9B8C7D6E5F4.jpg
-        |-- 143012_3EB0A9B8C7D6E5F4.json
-        |-- 143155_3EB0F1E2D3C4B5A6.mp4
-        |-- 143155_3EB0F1E2D3C4B5A6.json
-        |-- 164820_3EB012AB34CD56EF.txt   # text-only status
-        `-- 164820_3EB012AB34CD56EF.json
+`-- Alice_49123456789/                 # <push_name>_<jid.user>
+    |-- 2026-04-23_143012_3EB0A9B8C7D6E5F4.jpg
+    |-- 2026-04-23_143012_3EB0A9B8C7D6E5F4.json
+    |-- 2026-04-23_143155_3EB0F1E2D3C4B5A6.mp4
+    |-- 2026-04-23_143155_3EB0F1E2D3C4B5A6.json
+    |-- 2026-04-24_164820_3EB012AB34CD56EF.txt   # text-only status
+    `-- 2026-04-24_164820_3EB012AB34CD56EF.json
 ```
+
+File stem: `<YYYY-MM-DD>_<HHMMSS>_<msgid>`. Same stem for the media (or
+`.txt`) and the `.json` sidecar, so they're always grouped when sorted
+alphabetically.
 
 JSON sidecar schema (all fields optional except `msg_id`, `sender_jid`,
 `received_at`):
@@ -201,7 +207,7 @@ JSON sidecar schema (all fields optional except `msg_id`, `sender_jid`,
   "sender_jid": "49123456789@s.whatsapp.net",
   "push_name": "Alice",
   "received_at": "2026-04-23T14:30:12+02:00",
-  "media_path": "/var/lib/.../143012_3EB0A9B8C7D6E5F4.jpg",
+  "media_path": "/var/lib/.../Alice_49123456789/2026-04-23_143012_3EB0A9B8C7D6E5F4.jpg",
   "mimetype": "image/jpeg",
   "caption": "Optional picture caption"
 }
@@ -211,8 +217,13 @@ JSON sidecar schema (all fields optional except `msg_id`, `sender_jid`,
 
 The `story-saver-rotate.timer` unit calls `story-saver-rotate` daily at 04:00:
 
-1. Day folders whose name is older than `retention_days` are deleted entirely.
-2. `seen_messages` rows with `received_at < cutoff` are pruned from `index.db`.
+1. Any file under `<dataDir>/<contact>/` whose name starts with a date prefix
+   older than `retention_days` is deleted.
+2. Contact folders that end up empty afterwards are removed.
+3. `seen_messages` rows with `received_at < cutoff` are pruned from `index.db`.
+
+Files that don't start with `YYYY-MM-DD_` are left alone, so hand-dropped
+notes or manual archives inside a contact folder are safe.
 
 `retention_days: 0` disables pruning completely.
 
@@ -255,8 +266,8 @@ account (see the smoke test below).
 2. Start `story-saver`; wait for `daemon started — awaiting status broadcasts`.
 3. From a third account (whose number the test phone has saved) post a
    status — an image with a caption, then a video, then a text-only post.
-4. Inside ~30s, `data/<today>/<poster>/` should contain the media files
-   plus their `.json` sidecars.
+4. Inside ~30s, `data/<poster>/` should contain files named
+   `YYYY-MM-DD_HHMMSS_<msgid>.<ext>` plus their `.json` sidecars.
 5. Kill and restart the daemon; nothing gets stored twice (dedup via
    `index.db`).
 6. Briefly drop the network (`iptables -A OUTPUT -p tcp --dport 443 -j DROP`
