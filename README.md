@@ -11,6 +11,88 @@ incoming status broadcast (photo, video, text + captions) to disk.
 > historically been low-risk, but there is no guarantee. Do not use your
 > primary number with this.
 
+> [!IMPORTANT]
+> **There is no reliable way to fetch statuses posted before the daemon
+> started.** We only capture statuses live, while connected. If the daemon
+> is offline for N minutes, expect to lose every status posted in those N
+> minutes. WhatsApp Desktop *can* backfill prior statuses on reopen, which
+> proves a server-side mechanism exists, but it is not reverse-engineered
+> in any open-source WhatsApp library (whatsmeow, Baileys, whatsapp-web.js).
+> See **[Limitations](#limitations)** below and upstream discussion
+> [whatsmeow#1033](https://github.com/tulir/whatsmeow/discussions/1033).
+> The only mitigation is **24/7 daemon uptime**.
+
+---
+
+## Limitations
+
+Read this before deploying. These are not bugs — they are real constraints
+imposed by the WhatsApp protocol and the state of open-source tooling.
+
+### 1. No server-side backfill of prior statuses
+
+When the daemon starts after a period of downtime, statuses posted during
+that downtime are **permanently lost** (from our perspective). Concretely:
+
+- The server's `<offline count=N>` replay mechanism empirically reports
+  `count=0` for status@broadcast. Statuses are not queued for offline
+  replay the way direct messages are.
+- The phone's `HistorySync` push only reliably fires on first pairing
+  (type `INITIAL_STATUS_V3`), not on subsequent reconnects.
+- On-demand `HistorySyncOnDemand` peer requests to the phone usually get
+  ACKed but return no data. The code still fires it at startup as a
+  best-effort probe, but don't count on it.
+- There is no discovered IQ or notification that asks the **server** for
+  the list of currently-active statuses. WhatsApp Desktop sends one, but
+  it has not been reverse-engineered into any open library. Upstream
+  tracking issue: [whatsmeow#1033](https://github.com/tulir/whatsmeow/discussions/1033).
+
+Operational consequence: **minimize daemon downtime.** Plan deploys during
+low-post hours. Any multi-hour outage loses posts from that window, and
+statuses expire 24h after posting, so nothing recovers them after expiry.
+
+### 2. Phone must be online for first pairing and for fallback paths
+
+- First pairing (QR scan) requires the phone to be online.
+- The opportunistic `HistorySync` / `HistorySyncOnDemand` paths also require
+  the phone to be online.
+- Live capture itself does **not** require the phone. Once paired, the
+  daemon receives statuses directly from WhatsApp's server.
+
+### 3. ToS and account risk
+
+- whatsmeow is an unofficial client. Using it technically violates
+  WhatsApp's Terms of Service.
+- Passive read-only use from a dedicated secondary number has historically
+  been low-risk, but there is no guarantee. Do not pair your primary number.
+- A banned session shows up as `events.LoggedOut`; the daemon exits with
+  status 1 and systemd is configured to **not** auto-restart (requires
+  manual re-pair).
+
+### 4. Status types and features we don't handle yet
+
+- Voice-note statuses (audio messages posted as status): skipped in the
+  classifier (no handler, falls through to `kindNone`). Add when needed.
+- Revoke/delete notifications for previously captured statuses: we log and
+  skip them. The original file stays on disk as a historical record.
+- Multi-account: one paired secondary number per daemon instance. To
+  archive multiple accounts, run separate daemon instances with separate
+  config and state directories.
+
+### 5. No decryption of already-expired media
+
+Status media on WhatsApp's CDN is only retrievable while the status is
+still active (within its 24h window). If the daemon receives a message
+event late (e.g. through a sluggish HistorySync batch) and the media has
+already expired server-side, `client.Download` will fail. We log the
+error and skip the post; the JSON sidecar still lands on disk with
+`media_path` empty.
+
+If you have information about how WhatsApp Desktop fetches prior statuses
+and want to help close this gap, comment on
+[issue #1](https://github.com/peetzweg/status-saver/issues/1) — it tracks
+this limitation with repro details and everything we've already tried.
+
 ---
 
 ## What it does
