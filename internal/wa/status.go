@@ -16,6 +16,19 @@ import (
 	"github.com/ppoloczek/status-saver/internal/storage"
 )
 
+// Metrics is the minimal callback surface the status handler needs for
+// observability. Any implementation (or a no-op) is fine; see
+// internal/metrics for the production recorder used by the daemon.
+type Metrics interface {
+	RecordArchived()
+	RecordError()
+}
+
+type noopMetrics struct{}
+
+func (noopMetrics) RecordArchived() {}
+func (noopMetrics) RecordError()    {}
+
 // StatusHandler processes status@broadcast message events: dedup, media
 // download, metadata sidecar write, index update.
 type StatusHandler struct {
@@ -23,14 +36,22 @@ type StatusHandler struct {
 	dataDir string
 	index   *storage.Index
 	log     zerolog.Logger
+	metrics Metrics
 }
 
-func NewStatusHandler(c *whatsmeow.Client, dataDir string, idx *storage.Index, log zerolog.Logger) *StatusHandler {
+// NewStatusHandler constructs a StatusHandler. A nil metrics argument is
+// treated as a no-op recorder so callers that don't care about observability
+// don't need to stub one.
+func NewStatusHandler(c *whatsmeow.Client, dataDir string, idx *storage.Index, log zerolog.Logger, m Metrics) *StatusHandler {
+	if m == nil {
+		m = noopMetrics{}
+	}
 	return &StatusHandler{
 		client:  c,
 		dataDir: dataDir,
 		index:   idx,
 		log:     log.With().Str("mod", "status").Logger(),
+		metrics: m,
 	}
 }
 
@@ -103,6 +124,7 @@ func (h *StatusHandler) archive(ctx context.Context, evt *events.Message) {
 		mediaPath, err := h.downloadMedia(ctx, evt.Message, base)
 		if err != nil {
 			log.Error().Err(err).Msg("media download failed")
+			h.metrics.RecordError()
 			return
 		}
 		meta.MediaPath = mediaPath
@@ -113,6 +135,7 @@ func (h *StatusHandler) archive(ctx context.Context, evt *events.Message) {
 		txtPath := base + ".txt"
 		if err := storage.AtomicWriteFile(txtPath, []byte(text), 0o640); err != nil {
 			log.Error().Err(err).Msg("write text failed")
+			h.metrics.RecordError()
 			return
 		}
 		storedPath = txtPath
@@ -120,12 +143,14 @@ func (h *StatusHandler) archive(ctx context.Context, evt *events.Message) {
 
 	if err := writeJSON(jsonPath, meta); err != nil {
 		log.Error().Err(err).Msg("write metadata failed")
+		h.metrics.RecordError()
 		return
 	}
 
 	inserted, err := h.index.MarkSeen(msgID, senderJID, ts.Unix(), storedPath)
 	if err != nil {
 		log.Error().Err(err).Msg("mark seen failed")
+		h.metrics.RecordError()
 		return
 	}
 	if inserted {
@@ -133,6 +158,7 @@ func (h *StatusHandler) archive(ctx context.Context, evt *events.Message) {
 			Str("kind", kind.String()).
 			Str("path", storedPath).
 			Msg("status archived")
+		h.metrics.RecordArchived()
 	}
 }
 

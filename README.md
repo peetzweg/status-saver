@@ -380,6 +380,23 @@ Interesting log fields (zerolog, with `mod=wa` / `mod=status` / ...):
 - `"whatsapp disconnected (will auto-reconnect)"` — transient, no action needed
 - `"whatsapp logged out — session invalid"` — terminal, exit 1, re-pair required
 
+### HTTP endpoints (optional)
+
+Set `metrics_addr: "127.0.0.1:9090"` in the config to expose:
+
+- `GET /health` → `200 ok` when the WhatsApp session is connected,
+  `503 not connected` otherwise. Ideal for a systemd / uptime probe.
+- `GET /metrics` → Prometheus text exposition format with:
+  - `statussaver_archived_total` (counter)
+  - `statussaver_errors_total` (counter)
+  - `statussaver_connected` (gauge, 0/1)
+  - `statussaver_last_archived_timestamp_seconds` (gauge, unix time)
+  - `statussaver_uptime_seconds` (gauge)
+
+Endpoints are **unauthenticated** — bind only to `127.0.0.1` (or behind
+an auth proxy). Leave `metrics_addr` empty to disable the listener
+entirely (default).
+
 ## Development
 
 ```

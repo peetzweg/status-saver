@@ -24,3 +24,9 @@ log_level: info
 # was logged out (e.g. device removed from the phone). Useful for ntfy.sh/Slack
 # alerts. Empty = disabled.
 alert_webhook: ""
+
+# Optional: listen for /metrics and /health on this address. Empty = disabled.
+# Bind to 127.0.0.1 only; there is no auth on these endpoints.
+# /metrics is Prometheus text format; /health returns 200 when connected,
+# 503 when the WhatsApp session is down.
+metrics_addr: ""
