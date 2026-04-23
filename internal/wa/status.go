@@ -58,6 +58,19 @@ func (h *StatusHandler) archive(ctx context.Context, evt *events.Message) {
 		ts = time.Now()
 	}
 
+	// Classify upfront. whatsmeow often dispatches two events for the same
+	// msgID on a status post: first an infrastructure wrapper (sender-key
+	// distribution, ephemeral setting, etc.) with no user-visible content,
+	// then the actual payload. Marking the first dispatch as seen would
+	// cause the second one — the real image/video/text — to be rejected
+	// as a duplicate. So: classify first, and skip empty dispatches
+	// without touching the index.
+	kind, caption, mime := classify(evt.Message)
+	if kind == kindNone {
+		log.Debug().Msg("status event has no user-visible content — skipping (likely sender-key distribution)")
+		return
+	}
+
 	seen, err := h.index.HasSeen(msgID, senderJID)
 	if err != nil {
 		log.Error().Err(err).Msg("index lookup failed")
@@ -80,41 +93,34 @@ func (h *StatusHandler) archive(ctx context.Context, evt *events.Message) {
 		SenderJID:  senderJID,
 		PushName:   evt.Info.PushName,
 		ReceivedAt: ts.Format(time.RFC3339),
+		Caption:    caption,
+		Mimetype:   mime,
 	}
 	storedPath := ""
 
-	mediaPath, mime, caption, err := h.downloadMedia(ctx, evt.Message, base)
-	if err != nil {
-		log.Error().Err(err).Msg("media download failed")
-		return
-	}
-	switch {
-	case mediaPath != "":
+	switch kind {
+	case kindImage, kindVideo:
+		mediaPath, err := h.downloadMedia(ctx, evt.Message, base)
+		if err != nil {
+			log.Error().Err(err).Msg("media download failed")
+			return
+		}
 		meta.MediaPath = mediaPath
-		meta.Mimetype = mime
-		meta.Caption = caption
 		storedPath = mediaPath
-	default:
+	case kindText:
 		text := textOf(evt.Message)
 		meta.Text = text
-		if text == "" {
-			log.Debug().Msg("status has neither media nor text — metadata only")
-		} else {
-			txtPath := base + ".txt"
-			if err := os.WriteFile(txtPath, []byte(text), 0o640); err != nil {
-				log.Error().Err(err).Msg("write text failed")
-				return
-			}
-			storedPath = txtPath
+		txtPath := base + ".txt"
+		if err := os.WriteFile(txtPath, []byte(text), 0o640); err != nil {
+			log.Error().Err(err).Msg("write text failed")
+			return
 		}
+		storedPath = txtPath
 	}
 
 	if err := writeJSON(jsonPath, meta); err != nil {
 		log.Error().Err(err).Msg("write metadata failed")
 		return
-	}
-	if storedPath == "" {
-		storedPath = jsonPath
 	}
 
 	inserted, err := h.index.MarkSeen(msgID, senderJID, ts.Unix(), storedPath)
@@ -123,27 +129,66 @@ func (h *StatusHandler) archive(ctx context.Context, evt *events.Message) {
 		return
 	}
 	if inserted {
-		log.Info().Str("path", storedPath).Msg("status archived")
+		log.Info().
+			Str("kind", kind.String()).
+			Str("path", storedPath).
+			Msg("status archived")
 	}
 }
 
-// downloadMedia pulls media out of the message, if any, and writes it next to
-// base. Returns (path, mime, caption). All empty if the status is text-only.
-func (h *StatusHandler) downloadMedia(ctx context.Context, msg *waE2E.Message, base string) (string, string, string, error) {
+type contentKind int
+
+const (
+	kindNone contentKind = iota
+	kindImage
+	kindVideo
+	kindText
+)
+
+func (k contentKind) String() string {
+	switch k {
+	case kindImage:
+		return "image"
+	case kindVideo:
+		return "video"
+	case kindText:
+		return "text"
+	default:
+		return "none"
+	}
+}
+
+// classify inspects a decoded whatsmeow message and reports the kind of
+// user-visible content it carries, plus any caption/mimetype. kindNone
+// means the message is an infrastructure wrapper (e.g. sender-key
+// distribution) and should be skipped entirely.
+func classify(msg *waE2E.Message) (kind contentKind, caption, mime string) {
 	if msg == nil {
-		return "", "", "", nil
+		return kindNone, "", ""
 	}
 	if img := msg.GetImageMessage(); img != nil {
-		mime := img.GetMimetype()
-		path, err := h.save(ctx, img, base+extFromMime(mime, ".jpg"))
-		return path, mime, img.GetCaption(), err
+		return kindImage, img.GetCaption(), img.GetMimetype()
 	}
 	if vid := msg.GetVideoMessage(); vid != nil {
-		mime := vid.GetMimetype()
-		path, err := h.save(ctx, vid, base+extFromMime(mime, ".mp4"))
-		return path, mime, vid.GetCaption(), err
+		return kindVideo, vid.GetCaption(), vid.GetMimetype()
 	}
-	return "", "", "", nil
+	if txt := textOf(msg); txt != "" {
+		return kindText, "", ""
+	}
+	return kindNone, "", ""
+}
+
+// downloadMedia saves the media from msg next to base. Caller guarantees msg
+// carries an ImageMessage or VideoMessage (classify() returned kindImage or
+// kindVideo). Returns the absolute path of the written file.
+func (h *StatusHandler) downloadMedia(ctx context.Context, msg *waE2E.Message, base string) (string, error) {
+	if img := msg.GetImageMessage(); img != nil {
+		return h.save(ctx, img, base+extFromMime(img.GetMimetype(), ".jpg"))
+	}
+	if vid := msg.GetVideoMessage(); vid != nil {
+		return h.save(ctx, vid, base+extFromMime(vid.GetMimetype(), ".mp4"))
+	}
+	return "", fmt.Errorf("downloadMedia called on non-media message")
 }
 
 func (h *StatusHandler) save(ctx context.Context, m whatsmeow.DownloadableMessage, path string) (string, error) {
