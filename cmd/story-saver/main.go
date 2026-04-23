@@ -73,8 +73,11 @@ func main() {
 	}
 	log.Info().Str("jid", c.WA.Store.ID.String()).Msg("daemon started — awaiting status broadcasts")
 
-	// Ask the phone to replay recent statuses once the session has settled.
-	// Best-effort; phone must be online for this to produce anything.
+	// Fire a best-effort status-backfill request at the phone 5s after connect.
+	// Reliability is poor: it only works when the phone is online AND decides
+	// to respond, which defeats headless server deployment. Kept because when
+	// it does fire, it's free. See whatsmeow/discussions/1033 for the wider
+	// context on why no reliable server-driven backfill exists yet.
 	go func() {
 		select {
 		case <-time.After(5 * time.Second):
@@ -82,7 +85,7 @@ func main() {
 			return
 		}
 		if err := c.RequestRecentStatuses(rootCtx, recentStatusRequestCount); err != nil {
-			log.Warn().Err(err).Msg("request recent statuses failed — continuing with live capture only")
+			log.Warn().Err(err).Msg("best-effort status backfill request failed — continuing with live capture only")
 		}
 	}()
 
