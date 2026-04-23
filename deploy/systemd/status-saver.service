@@ -1,21 +1,21 @@
 [Unit]
-Description=story-saver WhatsApp status archiver daemon
-Documentation=https://github.com/ppoloczek/story-saver
+Description=status-saver WhatsApp status archiver daemon
+Documentation=https://github.com/ppoloczek/status-saver
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=story-saver
-Group=story-saver
-ExecStart=/usr/local/bin/story-saver --config /etc/story-saver/config.yaml
+User=status-saver
+Group=status-saver
+ExecStart=/usr/local/bin/status-saver --config /etc/status-saver/config.yaml
 Restart=always
 RestartSec=30s
 # Stop restarting if whatsmeow reports a permanent logout — operator must re-pair.
 RestartPreventExitStatus=1
 
 # Runtime state (session.db, index.db, data/) owned by this unit.
-StateDirectory=story-saver
+StateDirectory=status-saver
 StateDirectoryMode=0750
 
 # Hardening — daemon only needs to read config, write state, and reach the
@@ -28,7 +28,7 @@ PrivateDevices=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
-ReadWritePaths=/var/lib/story-saver
+ReadWritePaths=/var/lib/status-saver
 
 [Install]
 WantedBy=multi-user.target

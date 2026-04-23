@@ -1,4 +1,4 @@
-// Command story-saver-pair performs a one-shot QR pairing against WhatsApp
+// Command status-saver-pair performs a one-shot QR pairing against WhatsApp
 // and writes the resulting session into the configured SQLite store. Run this
 // interactively on the server (or via ssh) before starting the daemon.
 package main
@@ -16,9 +16,9 @@ import (
 	"github.com/mdp/qrterminal/v3"
 	"go.mau.fi/whatsmeow"
 
-	"github.com/ppoloczek/story-saver/internal/config"
-	"github.com/ppoloczek/story-saver/internal/logging"
-	"github.com/ppoloczek/story-saver/internal/wa"
+	"github.com/ppoloczek/status-saver/internal/config"
+	"github.com/ppoloczek/status-saver/internal/logging"
+	"github.com/ppoloczek/status-saver/internal/wa"
 )
 
 // postPairGrace is how long we keep the WebSocket open after the pair-success
@@ -28,7 +28,7 @@ import (
 const postPairGrace = 30 * time.Second
 
 func main() {
-	configPath := flag.String("config", "/etc/story-saver/config.yaml", "path to YAML config")
+	configPath := flag.String("config", "/etc/status-saver/config.yaml", "path to YAML config")
 	force := flag.Bool("force", false, "delete existing session.db and re-pair from scratch")
 	flag.Parse()
 

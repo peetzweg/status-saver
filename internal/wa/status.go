@@ -13,7 +13,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 
-	"github.com/ppoloczek/story-saver/internal/storage"
+	"github.com/ppoloczek/status-saver/internal/storage"
 )
 
 // StatusHandler processes status@broadcast message events: dedup, media

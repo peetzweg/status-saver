@@ -1,4 +1,4 @@
-# story-saver
+# status-saver
 
 Archiver daemon for WhatsApp Status posts (the 24-hour story feature) from
 your contacts. Runs headless on a Linux server, pairs once via Multi-Device
@@ -99,7 +99,7 @@ this limitation with repro details and everything we've already tried.
 
 When a contact posts a status, WhatsApp delivers it to every linked device of
 every viewer as a normal end-to-end encrypted message — addressed to the
-special JID `status@broadcast`. `story-saver` keeps a persistent Multi-Device
+special JID `status@broadcast`. `status-saver` keeps a persistent Multi-Device
 session open, filters every incoming message on that JID, decrypts any media
 attachments (AES-CBC/HMAC via whatsmeow), and writes everything to disk along
 with a metadata sidecar.
@@ -121,7 +121,7 @@ timer at 04:00 only does housekeeping.
 
 ```
  +-----------------------------------------------------+
- |  story-saver daemon (systemd, 24/7)                 |
+ |  status-saver daemon (systemd, 24/7)                 |
  |  +---------------+   +---------------------------+  |
  |  | whatsmeow     |-->| status message handler    |  |
  |  | Client (MD)   |   | (filter status@broadcast) |  |
@@ -141,9 +141,9 @@ timer at 04:00 only does housekeeping.
 
 ```
 cmd/
-|-- story-saver/          # long-running daemon
-|-- story-saver-pair/     # interactive QR pairing, runs exactly once
-`-- story-saver-rotate/   # oneshot, triggered by the systemd timer
+|-- status-saver/          # long-running daemon
+|-- status-saver-pair/     # interactive QR pairing, runs exactly once
+`-- status-saver-rotate/   # oneshot, triggered by the systemd timer
 
 internal/
 |-- config/     # YAML loader + validation
@@ -225,9 +225,9 @@ whatsmeow. Would be a genuinely useful contribution to the ecosystem.
 ## Building
 
 ```
-CGO_ENABLED=1 go build -o bin/story-saver        ./cmd/story-saver
-CGO_ENABLED=1 go build -o bin/story-saver-pair   ./cmd/story-saver-pair
-CGO_ENABLED=1 go build -o bin/story-saver-rotate ./cmd/story-saver-rotate
+CGO_ENABLED=1 go build -o bin/status-saver        ./cmd/status-saver
+CGO_ENABLED=1 go build -o bin/status-saver-pair   ./cmd/status-saver-pair
+CGO_ENABLED=1 go build -o bin/status-saver-rotate ./cmd/status-saver-rotate
 ```
 
 Why CGO: the SQLite driver is a C binding. If CGO is unavailable on the
@@ -236,10 +236,10 @@ target host, swapping in `modernc.org/sqlite` (pure Go) is a small patch.
 ## Configuring
 
 ```yaml
-# /etc/story-saver/config.yaml
-data_dir:       /var/lib/story-saver/data
-session_db:     /var/lib/story-saver/session.db
-index_db:       /var/lib/story-saver/index.db
+# /etc/status-saver/config.yaml
+data_dir:       /var/lib/status-saver/data
+session_db:     /var/lib/status-saver/session.db
+index_db:       /var/lib/status-saver/index.db
 retention_days: 90        # 0 = never delete
 rotation_hour:  4         # informational; the actual schedule lives in the timer
 log_level:      info      # trace|debug|info|warn|error
@@ -255,7 +255,7 @@ The daemon will not start unless a device is paired. Pairing is interactive
 and needs your phone:
 
 ```
-sudo -u story-saver story-saver-pair --config /etc/story-saver/config.yaml
+sudo -u status-saver status-saver-pair --config /etc/status-saver/config.yaml
 ```
 
 QR codes scroll by in the terminal. On the secondary phone:
@@ -279,13 +279,13 @@ account ban, etc.) — the daemon exits with status 1 in that case.
 
 If an earlier pair attempt exited too early (pre-fix, or network glitch,
 or the grace period was cut short), `session.db` will look "paired" but
-the phone never confirmed. Running `story-saver-pair` again will just
+the phone never confirmed. Running `status-saver-pair` again will just
 print "already paired — pass --force to delete the session and re-pair".
 
 Force a fresh pair:
 
 ```
-story-saver-pair --config ./config.yaml --force
+status-saver-pair --config ./config.yaml --force
 ```
 
 `--force` deletes `session.db` and starts over. Scan the QR again.
@@ -298,14 +298,14 @@ See **`deploy/INSTALL.md`** for the full setup: user, binaries, config,
 service, and timer. Short version:
 
 ```
-sudo systemctl enable --now story-saver.service
-sudo systemctl enable --now story-saver-rotate.timer
+sudo systemctl enable --now status-saver.service
+sudo systemctl enable --now status-saver-rotate.timer
 ```
 
 ### Manually (for debugging)
 
 ```
-./bin/story-saver --config ./config.yaml
+./bin/status-saver --config ./config.yaml
 ```
 
 Stop with `Ctrl-C`. Shutdown is clean (whatsmeow disconnect, SQLite flush).
@@ -316,7 +316,7 @@ Flat layout — one folder per contact, with the date/time baked into each
 filename so posts still sort chronologically within a contact.
 
 ```
-/var/lib/story-saver/data/
+/var/lib/status-saver/data/
 `-- Alice_49123456789/                 # <push_name>_<jid.user>
     |-- 2026-04-23_143012_3EB0A9B8C7D6E5F4.jpg
     |-- 2026-04-23_143012_3EB0A9B8C7D6E5F4.json
@@ -347,7 +347,7 @@ JSON sidecar schema (all fields optional except `msg_id`, `sender_jid`,
 
 ## Retention
 
-The `story-saver-rotate.timer` unit calls `story-saver-rotate` daily at 04:00:
+The `status-saver-rotate.timer` unit calls `status-saver-rotate` daily at 04:00:
 
 1. Any file under `<dataDir>/<contact>/` whose name starts with a date prefix
    older than `retention_days` is deleted.
@@ -362,15 +362,15 @@ notes or manual archives inside a contact folder are safe.
 Trigger a run manually:
 
 ```
-sudo systemctl start story-saver-rotate.service
+sudo systemctl start status-saver-rotate.service
 ```
 
 ## Observability
 
 ```
-journalctl -u story-saver -f              # live daemon log
-journalctl -u story-saver-rotate -e       # last rotation run
-systemctl list-timers story-saver-rotate  # next scheduled run
+journalctl -u status-saver -f              # live daemon log
+journalctl -u status-saver-rotate -e       # last rotation run
+systemctl list-timers status-saver-rotate  # next scheduled run
 ```
 
 Interesting log fields (zerolog, with `mod=wa` / `mod=status` / ...):
@@ -394,8 +394,8 @@ account (see the smoke test below).
 
 ### E2E smoke test
 
-1. `story-saver-pair` → scan QR with the test phone.
-2. Start `story-saver`; wait for `daemon started — awaiting status broadcasts`.
+1. `status-saver-pair` → scan QR with the test phone.
+2. Start `status-saver`; wait for `daemon started — awaiting status broadcasts`.
 3. From a third account (whose number the test phone has saved) post a
    status — an image with a caption, then a video, then a text-only post.
 4. Inside ~30s, `data/<poster>/` should contain files named

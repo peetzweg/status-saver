@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily rotation for story-saver archives
+Description=Daily rotation for status-saver archives
 
 [Timer]
 # Fire at 04:00 local time every day. Persistent=true means that if the host

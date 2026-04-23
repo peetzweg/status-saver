@@ -1,6 +1,6 @@
 # Binaries
-/story-saver
-/story-saver-pair
+/status-saver
+/status-saver-pair
 /bin/
 
 # Go build / test artifacts

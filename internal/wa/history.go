@@ -100,7 +100,7 @@ func (h *HistorySyncHandler) Handle(ctx context.Context, evt interface{}) {
 // quit, implying a server-driven mechanism that none of the open-source
 // libraries (whatsmeow, Baileys, whatsapp-web.js) have reverse-engineered.
 // See https://github.com/tulir/whatsmeow/discussions/1033 — filed, unanswered.
-// The only reliable strategy for story-saver is 24/7 daemon uptime.
+// The only reliable strategy for status-saver is 24/7 daemon uptime.
 func (c *Client) RequestRecentStatuses(ctx context.Context, count int) error {
 	// Anchor: status@broadcast chat, "now" as the upper boundary. The phone
 	// interprets this as "give me the last `count` status messages older

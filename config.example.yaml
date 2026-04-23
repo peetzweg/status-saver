@@ -1,14 +1,14 @@
-# story-saver configuration
-# Copy to /etc/story-saver/config.yaml (or pass --config) and adjust paths.
+# status-saver configuration
+# Copy to /etc/status-saver/config.yaml (or pass --config) and adjust paths.
 
 # Where decrypted status media and metadata JSON files are written.
-data_dir: /var/lib/story-saver/data
+data_dir: /var/lib/status-saver/data
 
-# whatsmeow device-store SQLite DB (created by story-saver-pair on first pairing).
-session_db: /var/lib/story-saver/session.db
+# whatsmeow device-store SQLite DB (created by status-saver-pair on first pairing).
+session_db: /var/lib/status-saver/session.db
 
 # Dedup index — tracks seen status messages so restarts are idempotent.
-index_db: /var/lib/story-saver/index.db
+index_db: /var/lib/status-saver/index.db
 
 # Days to keep archived status data. 0 = keep forever.
 retention_days: 90

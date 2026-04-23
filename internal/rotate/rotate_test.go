@@ -8,7 +8,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/ppoloczek/story-saver/internal/storage"
+	"github.com/ppoloczek/status-saver/internal/storage"
 )
 
 func TestRunFlatLayout(t *testing.T) {
