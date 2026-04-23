@@ -17,6 +17,9 @@
 /state/
 /tmp/
 
+# Local clones of upstream repos used for source inspection
+/whatsmeow/
+
 # Local config (only the example is committed)
 config.yaml
 config.local.yaml
