@@ -2,10 +2,11 @@ package wa
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
+
+	"github.com/ppoloczek/status-saver/internal/storage"
 )
 
 type statusMeta struct {
@@ -71,5 +72,5 @@ func writeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o640)
+	return storage.AtomicWriteFile(path, data, 0o640)
 }
