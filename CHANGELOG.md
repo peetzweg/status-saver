@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.1.1](https://github.com/peetzweg/status-saver/compare/v0.1.0...v0.1.1) (2026-04-23)
+
+
+### Features
+
+* **cmd:** add story-saver daemon main ([7ebbdd5](https://github.com/peetzweg/status-saver/commit/7ebbdd5586e90ac20b4e0ee3a4a90098e49b0902))
+* **cmd:** add story-saver-pair QR pairing CLI ([9c97666](https://github.com/peetzweg/status-saver/commit/9c97666205328c60ded05d61547866aebb76b7b7))
+* **config,logging:** add YAML config loader and zerolog-based logging ([7abd0de](https://github.com/peetzweg/status-saver/commit/7abd0de1389477da19f7658083b84316c4da277e))
+* **daemon:** graceful shutdown — drain in-flight handlers before exit ([6a50157](https://github.com/peetzweg/status-saver/commit/6a5015728767096e99c2a46a794dd83e8fc7d3b2))
+* **deploy:** add systemd units and install instructions ([f5cb707](https://github.com/peetzweg/status-saver/commit/f5cb707036a636dc21ddc987a48846d367c5e131))
+* **metrics:** /health + /metrics HTTP endpoints ([9580e17](https://github.com/peetzweg/status-saver/commit/9580e17df2170c50e29320d11ebcf15326d3c85f))
+* **release:** release-please + goreleaser + conventional-commit gate ([8a23b7d](https://github.com/peetzweg/status-saver/commit/8a23b7d0f1894d4066ca7ae1f387787306fb3c85))
+* **rotate:** add retention pruning and story-saver-rotate binary ([2e3bb73](https://github.com/peetzweg/status-saver/commit/2e3bb7357ce5fc681746a09105a9a3dedbbfa1a6))
+* **storage:** add disk layout helper and SQLite dedup index ([af5a910](https://github.com/peetzweg/status-saver/commit/af5a9103c07b19d7287088350ffe5b6d66b0cc67))
+* **storage:** atomic file writes + use them in wa/status ([897ba42](https://github.com/peetzweg/status-saver/commit/897ba42c26b62e37ad5779e94d01691f1808726d))
+* **wa:** add whatsmeow client wrapper and status@broadcast handler ([6e9f444](https://github.com/peetzweg/status-saver/commit/6e9f44474e63206b6e04ec5023b62d2bf9d89376))
+* **wa:** on-demand status history request at startup ([c9181f0](https://github.com/peetzweg/status-saver/commit/c9181f0ece4c41f89f771afa87ac593d2f8abb0c))
+* **wa:** process HistorySync + OfflineSync to catch missed statuses ([90fbef5](https://github.com/peetzweg/status-saver/commit/90fbef58dbfa1c7c59997d5c82fb9794108fbe64))
+
+
+### Bug Fixes
+
+* **lint:** check (via blank assignment) errors from Close calls ([df68d88](https://github.com/peetzweg/status-saver/commit/df68d88264e47e6d2ade3aa602bbc1ff8dbe479c))
+* **pair:** keep connection open for post-pair handshake, add --force ([538162c](https://github.com/peetzweg/status-saver/commit/538162ca2ece6636e74f46a7936dd41e9392d82e))
+* **status:** classify content before marking seen ([a1df610](https://github.com/peetzweg/status-saver/commit/a1df61098c30f8734c1f9f2d3e9f6540ced8ce15))
+
+## Changelog
+
 This file is maintained automatically by
 [release-please](https://github.com/googleapis/release-please). Every
 conventional commit that lands on `main` accumulates into the next Release
