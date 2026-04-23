@@ -22,6 +22,11 @@ import (
 	"github.com/ppoloczek/story-saver/internal/wa"
 )
 
+// recentStatusRequestCount is how many status posts we ask the phone to
+// replay on daemon startup. 50 is the value recommended in whatsmeow's
+// BuildHistorySyncRequest doc comment.
+const recentStatusRequestCount = 50
+
 func main() {
 	configPath := flag.String("config", "/etc/story-saver/config.yaml", "path to YAML config")
 	flag.Parse()
@@ -67,6 +72,19 @@ func main() {
 		log.Fatal().Err(err).Msg("connect to whatsapp")
 	}
 	log.Info().Str("jid", c.WA.Store.ID.String()).Msg("daemon started — awaiting status broadcasts")
+
+	// Ask the phone to replay recent statuses once the session has settled.
+	// Best-effort; phone must be online for this to produce anything.
+	go func() {
+		select {
+		case <-time.After(5 * time.Second):
+		case <-rootCtx.Done():
+			return
+		}
+		if err := c.RequestRecentStatuses(rootCtx, recentStatusRequestCount); err != nil {
+			log.Warn().Err(err).Msg("request recent statuses failed — continuing with live capture only")
+		}
+	}()
 
 	select {
 	case <-rootCtx.Done():
