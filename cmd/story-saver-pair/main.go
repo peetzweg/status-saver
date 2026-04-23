@@ -21,8 +21,15 @@ import (
 	"github.com/ppoloczek/story-saver/internal/wa"
 )
 
+// postPairGrace is how long we keep the WebSocket open after the pair-success
+// IQ arrives. WhatsApp needs this window to push app-state keys, contacts, and
+// initial sync messages before the phone app marks the device as "linked".
+// Disconnecting sooner leaves the phone stuck on "pairing…".
+const postPairGrace = 30 * time.Second
+
 func main() {
 	configPath := flag.String("config", "/etc/story-saver/config.yaml", "path to YAML config")
+	force := flag.Bool("force", false, "delete existing session.db and re-pair from scratch")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
@@ -36,6 +43,13 @@ func main() {
 	}
 	log := logging.New(cfg.LogLevel)
 
+	if *force {
+		if err := os.Remove(cfg.SessionDB); err != nil && !os.IsNotExist(err) {
+			log.Fatal().Err(err).Str("path", cfg.SessionDB).Msg("force: remove session.db")
+		}
+		log.Info().Str("path", cfg.SessionDB).Msg("force: removed existing session.db — starting fresh")
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -48,7 +62,7 @@ func main() {
 	if c.IsPaired() {
 		log.Info().
 			Str("jid", c.WA.Store.ID.String()).
-			Msg("already paired — nothing to do (delete session.db to re-pair)")
+			Msg("already paired — pass --force to delete the session and re-pair")
 		return
 	}
 
@@ -62,14 +76,22 @@ func main() {
 
 	fmt.Println()
 	fmt.Println("Open WhatsApp on the phone that owns the target account:")
-	fmt.Println("  Settings → Linked Devices → Link a Device")
+	fmt.Println("  Settings -> Linked Devices -> Link a Device")
 	fmt.Println("Scan the QR code below. A fresh code is redrawn until pairing completes.")
 	fmt.Println()
 
 	if err := waitForPairing(ctx, qrChan); err != nil {
 		log.Fatal().Err(err).Msg("pairing failed")
 	}
-	log.Info().Str("jid", c.WA.Store.ID.String()).Msg("pairing successful — session stored")
+	log.Info().
+		Str("jid", c.WA.Store.ID.String()).
+		Dur("grace", postPairGrace).
+		Msg("pair-success received; keeping connection open for post-pair handshake")
+
+	graceCtx, graceCancel := context.WithTimeout(ctx, postPairGrace)
+	defer graceCancel()
+	<-graceCtx.Done()
+	log.Info().Msg("pairing complete — session stored, disconnecting")
 }
 
 func waitForPairing(ctx context.Context, qrChan <-chan whatsmeow.QRChannelItem) error {
