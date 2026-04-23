@@ -1,0 +1,71 @@
+# https://goreleaser.com/customization/
+# Validated locally with `goreleaser check` before each release.
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: status-saver
+    main: ./cmd/status-saver
+    binary: status-saver
+    env:
+      - CGO_ENABLED=1
+    goos: [linux]
+    goarch: [amd64]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+  - id: status-saver-pair
+    main: ./cmd/status-saver-pair
+    binary: status-saver-pair
+    env:
+      - CGO_ENABLED=1
+    goos: [linux]
+    goarch: [amd64]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+  - id: status-saver-rotate
+    main: ./cmd/status-saver-rotate
+    binary: status-saver-rotate
+    env:
+      - CGO_ENABLED=1
+    goos: [linux]
+    goarch: [amd64]
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+# One archive per release, containing all three binaries plus everything
+# an operator needs to deploy: systemd units, example config, docs, license.
+archives:
+  - id: bundle
+    ids:
+      - status-saver
+      - status-saver-pair
+      - status-saver-rotate
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+      - config.example.yaml
+      - deploy/INSTALL.md
+      - deploy/systemd/*
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+release:
+  # release-please creates the GitHub Release with the auto-generated body
+  # and the git tag. goreleaser finds that release and only uploads
+  # artifacts — it doesn't touch the body.
+  mode: keep-existing
+  # For non-prod 0.x versions, mark as prerelease in GitHub's UI. Flip off
+  # once we graduate to 1.0.0.
+  prerelease: auto
