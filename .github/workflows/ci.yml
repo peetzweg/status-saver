@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.25'
+  CGO_ENABLED: '1'   # mattn/go-sqlite3 requires CGO
+
+jobs:
+  test:
+    name: test + vet + gofmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: gofmt check
+        run: |
+          unformatted=$(gofmt -l cmd/ internal/)
+          if [ -n "$unformatted" ]; then
+            echo "::error::Files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./cmd/... ./internal/...
+
+      - name: go test (with race detector + coverage)
+        run: go test -race -cover ./cmd/... ./internal/...
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          # Pinned for reproducibility; bump deliberately.
+          version: v1.62
+          args: --timeout=5m ./cmd/... ./internal/...

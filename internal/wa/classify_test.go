@@ -105,7 +105,7 @@ func TestExtFromMime(t *testing.T) {
 		want     string
 	}{
 		{"image/jpeg", ".jpg", ".jpg"},
-		{"IMAGE/JPEG", ".jpg", ".jpg"},           // case-insensitive
+		{"IMAGE/JPEG", ".jpg", ".jpg"},                // case-insensitive
 		{"image/jpeg; charset=utf-8", ".jpg", ".jpg"}, // param stripping
 		{"image/png", ".jpg", ".png"},
 		{"image/webp", ".jpg", ".webp"},
