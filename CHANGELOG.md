@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/peetzweg/status-saver/compare/v1.0.0...v1.1.0) (2026-04-24)
+
+
+### Features
+
+* **rotate:** --retention-days CLI override for ad-hoc pruning ([91ac823](https://github.com/peetzweg/status-saver/commit/91ac823ea680cea5290f3b7979843770fd9a2a4b))
+
 ## [1.0.0](https://github.com/peetzweg/status-saver/compare/v0.1.1...v1.0.0) (2026-04-24)
 
 
