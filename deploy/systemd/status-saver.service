@@ -8,7 +8,7 @@ Wants=network-online.target
 Type=simple
 User=status-saver
 Group=status-saver
-ExecStart=/usr/local/bin/status-saver --config /etc/status-saver/config.yaml
+ExecStart=/usr/local/bin/status-saver run --config /etc/status-saver/config.yaml
 Restart=always
 RestartSec=30s
 # Stop restarting if whatsmeow reports a permanent logout — operator must re-pair.

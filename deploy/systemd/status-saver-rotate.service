@@ -6,7 +6,7 @@ Documentation=https://github.com/ppoloczek/status-saver
 Type=oneshot
 User=status-saver
 Group=status-saver
-ExecStart=/usr/local/bin/status-saver-rotate --config /etc/status-saver/config.yaml
+ExecStart=/usr/local/bin/status-saver rotate --config /etc/status-saver/config.yaml
 
 StateDirectory=status-saver
 StateDirectoryMode=0750

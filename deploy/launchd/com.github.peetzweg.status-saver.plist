@@ -17,6 +17,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/Users/YOURNAME/.local/bin/status-saver</string>
+        <string>run</string>
         <string>--config</string>
         <string>/Users/YOURNAME/Library/Application Support/status-saver/config.yaml</string>
     </array>

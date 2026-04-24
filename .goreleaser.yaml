@@ -6,6 +6,8 @@ before:
   hooks:
     - go mod tidy
 
+# Single binary now — dispatcher at cmd/status-saver with run/pair/rotate
+# subcommands. Version info embedded via internal/buildinfo.
 builds:
   - id: status-saver
     main: ./cmd/status-saver
@@ -15,36 +17,14 @@ builds:
     goos: [linux]
     goarch: [amd64]
     ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+      - -s -w
+      - -X github.com/ppoloczek/status-saver/internal/buildinfo.Version={{.Version}}
+      - -X github.com/ppoloczek/status-saver/internal/buildinfo.Commit={{.Commit}}
+      - -X github.com/ppoloczek/status-saver/internal/buildinfo.Date={{.Date}}
 
-  - id: status-saver-pair
-    main: ./cmd/status-saver-pair
-    binary: status-saver-pair
-    env:
-      - CGO_ENABLED=1
-    goos: [linux]
-    goarch: [amd64]
-    ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
-
-  - id: status-saver-rotate
-    main: ./cmd/status-saver-rotate
-    binary: status-saver-rotate
-    env:
-      - CGO_ENABLED=1
-    goos: [linux]
-    goarch: [amd64]
-    ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
-
-# One archive per release, containing all three binaries plus everything
-# an operator needs to deploy: systemd units, example config, docs, license.
 archives:
   - id: bundle
-    ids:
-      - status-saver
-      - status-saver-pair
-      - status-saver-rotate
+    ids: [status-saver]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     files:

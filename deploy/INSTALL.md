@@ -3,6 +3,18 @@
 This walks through a production Linux install under systemd, from a fresh
 Ubuntu/Debian VPS. macOS (launchd) is covered in a separate section below.
 
+> **Migrating from v0.1.x?** As of v0.2.0 there is one binary,
+> `status-saver`, with subcommands (`run` / `pair` / `rotate`) replacing
+> the three separate binaries. If you already installed v0.1.x you need to:
+> 1. remove `/usr/local/bin/status-saver-pair` and
+>    `/usr/local/bin/status-saver-rotate`
+> 2. update `ExecStart=` in any custom systemd unit files (`status-saver run`,
+>    `status-saver rotate`) — the bundled units in `deploy/systemd/` are
+>    already updated
+> 3. reload systemd: `sudo systemctl daemon-reload`
+> 4. pair/rotate commands now take a subcommand: `status-saver pair`,
+>    `status-saver rotate`.
+
 ## Prerequisites (Ubuntu / Debian)
 
 ```
@@ -29,18 +41,18 @@ through CGO. Without it, `go build` fails with `C compiler "gcc" not found`.
 git clone https://github.com/peetzweg/status-saver /root/git/status-saver
 cd /root/git/status-saver
 
-make build    # builds all three binaries into ./bin/
+make build    # produces ./bin/status-saver (a single binary)
 ```
 
-Under the hood that runs `CGO_ENABLED=1 go build -o bin/ ./cmd/...`, which
-produces `bin/status-saver`, `bin/status-saver-pair`, `bin/status-saver-rotate`
-in one shot. `make install` puts them in `$GOBIN` (usually `~/go/bin`)
-instead, if you'd rather skip the `/usr/local/bin` install step below.
+Under the hood that runs `CGO_ENABLED=1 go build -o bin/ ./cmd/...`.
+`make install` puts the binary in `$GOBIN` (usually `~/go/bin`) instead,
+if you'd rather skip the `/usr/local/bin` install step below.
 
-Verify the binaries work:
+Verify:
 
 ```
-./bin/status-saver --help
+./bin/status-saver help
+./bin/status-saver version
 ```
 
 **Troubleshooting**: if you run `go build` directly without arguments and
@@ -55,11 +67,9 @@ or include the path: `go build -o bin/ ./cmd/...`.
    sudo useradd --system --home /var/lib/status-saver --shell /usr/sbin/nologin status-saver
    ```
 
-2. Place binaries and config:
+2. Place the binary and config:
    ```
-   sudo install -m 0755 bin/status-saver        /usr/local/bin/
-   sudo install -m 0755 bin/status-saver-pair   /usr/local/bin/
-   sudo install -m 0755 bin/status-saver-rotate /usr/local/bin/
+   sudo install -m 0755 bin/status-saver /usr/local/bin/
    sudo mkdir -p /etc/status-saver
    sudo install -m 0640 config.example.yaml /etc/status-saver/config.yaml
    sudo chown root:status-saver /etc/status-saver/config.yaml
@@ -75,7 +85,7 @@ or include the path: `go build -o bin/ ./cmd/...`.
 
 4. Pair the WhatsApp account (interactive, one-off):
    ```
-   sudo -u status-saver status-saver-pair --config /etc/status-saver/config.yaml
+   sudo -u status-saver status-saver pair --config /etc/status-saver/config.yaml
    ```
    Scan the QR with the phone that owns the dedicated number
    (WhatsApp → Settings → Linked Devices → Link a Device). **Wait ~30
@@ -101,10 +111,10 @@ or include the path: `go build -o bin/ ./cmd/...`.
 
 ## If the daemon keeps exiting
 
-`status-saver` exits with status 1 when WhatsApp force-logs out the session
-(device removed from the phone, account banned). The unit file sets
-`RestartPreventExitStatus=1` so systemd does not loop — fix by re-running
-`status-saver-pair`.
+`status-saver run` exits with status 1 when WhatsApp force-logs out the
+session (device removed from the phone, account banned). The unit file
+sets `RestartPreventExitStatus=1` so systemd does not loop — fix by
+re-running `status-saver pair`.
 
 ---
 
@@ -136,10 +146,10 @@ make build
 Running as a LaunchAgent (user-level) is simpler than LaunchDaemon
 (system-wide) and fits the single-user nature of this tool.
 
-1. Put binaries somewhere stable:
+1. Put the binary somewhere stable:
    ```
    mkdir -p ~/.local/bin ~/Library/Application\ Support/status-saver/data
-   cp bin/status-saver{,-pair,-rotate} ~/.local/bin/
+   cp bin/status-saver ~/.local/bin/
    cp config.example.yaml ~/Library/Application\ Support/status-saver/config.yaml
    ```
 
@@ -149,7 +159,7 @@ Running as a LaunchAgent (user-level) is simpler than LaunchDaemon
 
 3. Pair first (interactive, terminal must stay open ~30s after pair-success):
    ```
-   ~/.local/bin/status-saver-pair --config ~/Library/Application\ Support/status-saver/config.yaml
+   ~/.local/bin/status-saver pair --config ~/Library/Application\ Support/status-saver/config.yaml
    ```
 
 4. Create a LaunchAgent plist at

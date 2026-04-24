@@ -140,19 +140,23 @@ timer at 04:00 only does housekeeping.
 ### Package layout
 
 ```
-cmd/
-|-- status-saver/          # long-running daemon
-|-- status-saver-pair/     # interactive QR pairing, runs exactly once
-`-- status-saver-rotate/   # oneshot, triggered by the systemd timer
+cmd/status-saver/          # single binary, dispatches to subcommands
 
 internal/
+|-- buildinfo/  # version metadata injected by goreleaser ldflags
+|-- cli/
+|   |-- daemon/   # `status-saver run`
+|   |-- pair/     # `status-saver pair`
+|   `-- rotate/   # `status-saver rotate`
 |-- config/     # YAML loader + validation
 |-- logging/    # zerolog console output
 |-- wa/         # whatsmeow client wrapper + status@broadcast handler
 |-- storage/    # on-disk path scheme + SQLite dedup index
+|-- metrics/    # /health + /metrics recorder
 `-- rotate/     # retention walker
 
 deploy/systemd/ # .service + .timer units, see deploy/INSTALL.md
+deploy/launchd/ # macOS LaunchAgent plist
 ```
 
 ### Data flow for one status post
@@ -232,9 +236,10 @@ make help       # list all targets
 ```
 
 Under the hood `make build` runs `CGO_ENABLED=1 go build -o bin/ ./cmd/...`
-which compiles every binary in one go. If you prefer raw Go commands or
-don't have `make` available, that one-liner works directly from the repo
-root — no need to invoke `go build` three times.
+and produces a single binary, `bin/status-saver`, which dispatches to three
+subcommands: `run` (daemon), `pair` (QR), `rotate` (retention). If you
+prefer raw Go commands or don't have `make` available, that one-liner
+works directly from the repo root.
 
 Why CGO: the SQLite driver is a C binding (`mattn/go-sqlite3`). On
 Debian/Ubuntu, `apt install build-essential` gives you the `gcc` it needs.
@@ -264,7 +269,7 @@ The daemon will not start unless a device is paired. Pairing is interactive
 and needs your phone:
 
 ```
-sudo -u status-saver status-saver-pair --config /etc/status-saver/config.yaml
+sudo -u status-saver status-saver pair --config /etc/status-saver/config.yaml
 ```
 
 QR codes scroll by in the terminal. On the secondary phone:
@@ -288,13 +293,13 @@ account ban, etc.) — the daemon exits with status 1 in that case.
 
 If an earlier pair attempt exited too early (pre-fix, or network glitch,
 or the grace period was cut short), `session.db` will look "paired" but
-the phone never confirmed. Running `status-saver-pair` again will just
+the phone never confirmed. Running `status-saver pair` again will just
 print "already paired — pass --force to delete the session and re-pair".
 
 Force a fresh pair:
 
 ```
-status-saver-pair --config ./config.yaml --force
+status-saver pair --config ./config.yaml --force
 ```
 
 `--force` deletes `session.db` and starts over. Scan the QR again.
@@ -314,7 +319,7 @@ sudo systemctl enable --now status-saver-rotate.timer
 ### Manually (for debugging)
 
 ```
-./bin/status-saver --config ./config.yaml
+./bin/status-saver run --config ./config.yaml
 ```
 
 Stop with `Ctrl-C`. Shutdown is clean (whatsmeow disconnect, SQLite flush).
@@ -356,7 +361,7 @@ JSON sidecar schema (all fields optional except `msg_id`, `sender_jid`,
 
 ## Retention
 
-The `status-saver-rotate.timer` unit calls `status-saver-rotate` daily at 04:00:
+The `status-saver-rotate.timer` unit calls `status-saver rotate` daily at 04:00:
 
 1. Any file under `<dataDir>/<contact>/` whose name starts with a date prefix
    older than `retention_days` is deleted.
@@ -420,7 +425,7 @@ account (see the smoke test below).
 
 ### E2E smoke test
 
-1. `status-saver-pair` → scan QR with the test phone.
+1. `status-saver pair` → scan QR with the test phone.
 2. Start `status-saver`; wait for `daemon started — awaiting status broadcasts`.
 3. From a third account (whose number the test phone has saved) post a
    status — an image with a caption, then a video, then a text-only post.
