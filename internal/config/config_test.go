@@ -23,7 +23,6 @@ data_dir: /tmp/ss/data
 session_db: /tmp/ss/session.db
 index_db: /tmp/ss/index.db
 retention_days: 30
-rotation_hour: 3
 log_level: debug
 `)
 	cfg, err := Load(path)
@@ -35,9 +34,6 @@ log_level: debug
 	}
 	if cfg.RetentionDays != 30 {
 		t.Errorf("RetentionDays = %d", cfg.RetentionDays)
-	}
-	if cfg.RotationHour != 3 {
-		t.Errorf("RotationHour = %d", cfg.RotationHour)
 	}
 	if cfg.LogLevel != "debug" {
 		t.Errorf("LogLevel = %q", cfg.LogLevel)
@@ -55,11 +51,9 @@ index_db: /tmp/ss/index.db
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.RetentionDays != 90 {
-		t.Errorf("default retention_days = %d, want 90", cfg.RetentionDays)
-	}
-	if cfg.RotationHour != 4 {
-		t.Errorf("default rotation_hour = %d, want 4", cfg.RotationHour)
+	// Retention is opt-in: default 0 = keep everything forever.
+	if cfg.RetentionDays != 0 {
+		t.Errorf("default retention_days = %d, want 0 (retention is opt-in)", cfg.RetentionDays)
 	}
 	if cfg.LogLevel != "info" {
 		t.Errorf("default log_level = %q, want info", cfg.LogLevel)
@@ -102,36 +96,11 @@ func TestLoadMissingRequiredFields(t *testing.T) {
 	}
 }
 
-func TestLoadInvalidRetentionAndHour(t *testing.T) {
-	cases := []struct {
-		name string
-		body string
-		want string
-	}{
-		{
-			name: "negative retention",
-			body: "data_dir: /d\nsession_db: /s\nindex_db: /i\nretention_days: -1\n",
-			want: "retention_days",
-		},
-		{
-			name: "hour too low",
-			body: "data_dir: /d\nsession_db: /s\nindex_db: /i\nrotation_hour: -1\n",
-			want: "rotation_hour",
-		},
-		{
-			name: "hour too high",
-			body: "data_dir: /d\nsession_db: /s\nindex_db: /i\nrotation_hour: 24\n",
-			want: "rotation_hour",
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			path := writeConfig(t, c.body)
-			_, err := Load(path)
-			if err == nil || !strings.Contains(err.Error(), c.want) {
-				t.Errorf("want error mentioning %q, got %v", c.want, err)
-			}
-		})
+func TestLoadNegativeRetentionRejected(t *testing.T) {
+	path := writeConfig(t, "data_dir: /d\nsession_db: /s\nindex_db: /i\nretention_days: -1\n")
+	_, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "retention_days") {
+		t.Errorf("want error mentioning retention_days, got %v", err)
 	}
 }
 

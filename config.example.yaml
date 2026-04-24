@@ -10,12 +10,12 @@ session_db: /var/lib/status-saver/session.db
 # Dedup index — tracks seen status messages so restarts are idempotent.
 index_db: /var/lib/status-saver/index.db
 
-# Days to keep archived status data. 0 = keep forever.
-retention_days: 90
-
-# Hour of day (local time) the rotate timer runs. Informational here; the actual
-# schedule lives in the systemd timer unit.
-rotation_hour: 4
+# Days to keep archived status data. 0 (the default) = keep forever. Set to
+# a positive integer to enable the `status-saver rotate` subcommand's
+# pruning. The rotate schedule itself lives in the systemd timer (or
+# whatever scheduler calls `status-saver rotate`), not here — a pass
+# does nothing when retention_days == 0.
+retention_days: 0
 
 # zerolog level: trace|debug|info|warn|error
 log_level: info
