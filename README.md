@@ -19,41 +19,6 @@ incoming status broadcast (photo, video, text + captions) to disk.
 
 ---
 
-## Quick start (Linux VPS)
-
-```bash
-# 1. prereqs (Ubuntu/Debian)
-sudo apt-get install -y build-essential git
-# install Go 1.25+ — `snap install go --classic` or the official tarball
-
-# 2. build
-git clone https://github.com/peetzweg/status-saver
-cd status-saver
-make build
-
-# 3. install (see deploy/INSTALL.md for the full hardened flow)
-sudo install -m 0755 bin/status-saver /usr/local/bin/
-sudo mkdir -p /etc/status-saver
-sudo install -m 0640 config.example.yaml /etc/status-saver/config.yaml
-sudo install -m 0644 deploy/systemd/*.service /etc/systemd/system/
-sudo install -m 0644 deploy/systemd/*.timer   /etc/systemd/system/
-sudo systemctl daemon-reload
-
-# 4. pair the WhatsApp account (interactive, needs your phone to scan QR)
-sudo status-saver pair --config /etc/status-saver/config.yaml
-
-# 5. start the service
-sudo systemctl enable --now status-saver.service
-sudo systemctl enable --now status-saver-rotate.timer
-```
-
-Full walkthrough with dedicated-user setup, permissions, and macOS launchd:
-**[`deploy/INSTALL.md`](./deploy/INSTALL.md)**.
-
-Alternative to building from source: download the
-[latest release](https://github.com/peetzweg/status-saver/releases) tarball
-(Linux amd64 only today), skip `build-essential` and Go entirely.
-
 ## CLI
 
 Single binary with subcommands:
@@ -67,6 +32,185 @@ status-saver help
 ```
 
 Each subcommand accepts `--help` for its own flags.
+
+## Install
+
+Supported targets: **Linux with systemd** (production) and
+**macOS with launchd** (development / personal use).
+
+You can either build from source (needs Go 1.25+ and a C compiler) or
+download a pre-built tarball from the
+[Releases page](https://github.com/peetzweg/status-saver/releases)
+(Linux amd64 only today — other platforms need a source build).
+
+### Prerequisites
+
+**Ubuntu / Debian:**
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential git curl
+
+# Go 1.25+ — apt's golang-go is usually too old on LTS. Pick one:
+# a) Snap:
+sudo snap install go --classic
+# b) Official tarball:
+curl -fsSL https://go.dev/dl/go1.25.9.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
+echo 'export PATH=$PATH:/usr/local/go/bin' | sudo tee /etc/profile.d/go.sh
+source /etc/profile.d/go.sh
+
+go version   # should report go1.25.x
+```
+
+`build-essential` provides `gcc`, required by `github.com/mattn/go-sqlite3`
+through CGO. Without it, `go build` fails with `C compiler "gcc" not found`.
+
+**macOS:**
+
+```bash
+brew install go           # Go 1.25+
+xcode-select --install    # for cc (CGO needs it)
+```
+
+### Build
+
+```bash
+git clone https://github.com/peetzweg/status-saver
+cd status-saver
+make build                # produces ./bin/status-saver (single binary)
+```
+
+Under the hood: `CGO_ENABLED=1 go build -o bin/ ./cmd/...`. `make install`
+puts the binary in `$GOBIN` (usually `~/go/bin`) instead — use it if you'd
+rather not `install` into `/usr/local/bin` manually.
+
+> Hit `no Go files in <dir>`? You skipped the package path. The repo root
+> has no `main.go`; each command lives under `cmd/<name>/`. Either use
+> `make build` or include the path: `go build -o bin/ ./cmd/...`.
+
+Verify:
+
+```bash
+./bin/status-saver help
+./bin/status-saver version
+```
+
+### Linux (systemd)
+
+1. Create a dedicated unprivileged user:
+   ```bash
+   sudo useradd --system --home /var/lib/status-saver --shell /usr/sbin/nologin status-saver
+   ```
+
+2. Place the binary and config:
+   ```bash
+   sudo install -m 0755 bin/status-saver /usr/local/bin/
+   sudo mkdir -p /etc/status-saver
+   sudo install -m 0640 config.example.yaml /etc/status-saver/config.yaml
+   sudo chown root:status-saver /etc/status-saver/config.yaml
+   ```
+
+3. Install systemd units:
+   ```bash
+   sudo install -m 0644 deploy/systemd/status-saver.service        /etc/systemd/system/
+   sudo install -m 0644 deploy/systemd/status-saver-rotate.service /etc/systemd/system/
+   sudo install -m 0644 deploy/systemd/status-saver-rotate.timer   /etc/systemd/system/
+   sudo systemctl daemon-reload
+   ```
+
+4. Pair the WhatsApp account (interactive — see [Pairing](#pairing)):
+   ```bash
+   sudo -u status-saver status-saver pair --config /etc/status-saver/config.yaml
+   ```
+
+5. Start the daemon and enable the rotation timer:
+   ```bash
+   sudo systemctl enable --now status-saver.service
+   sudo systemctl enable --now status-saver-rotate.timer
+   ```
+
+### macOS (launchd)
+
+> **Untested end-to-end** — treat as "best guess, please report back". Open
+> an issue at
+> https://github.com/peetzweg/status-saver/issues if something breaks.
+
+Running as a LaunchAgent (user-level) fits the single-user nature of this
+tool better than a LaunchDaemon (system-wide).
+
+1. Put the binary and config somewhere stable:
+   ```bash
+   mkdir -p ~/.local/bin "~/Library/Application Support/status-saver/data"
+   cp bin/status-saver ~/.local/bin/
+   cp config.example.yaml "~/Library/Application Support/status-saver/config.yaml"
+   ```
+
+2. Edit the config to point at absolute paths under
+   `~/Library/Application Support/status-saver/`. The daemon does **not**
+   expand `~`, so use the full path.
+
+3. Pair (terminal must stay open ~30s after `pair-success` — see
+   [Pairing](#pairing)):
+   ```bash
+   ~/.local/bin/status-saver pair --config "~/Library/Application Support/status-saver/config.yaml"
+   ```
+
+4. Install the LaunchAgent plist (template in `deploy/launchd/`; substitute
+   your username and real paths):
+   ```bash
+   cp deploy/launchd/com.github.peetzweg.status-saver.plist \
+      ~/Library/LaunchAgents/
+   # edit it to replace YOURNAME with your macOS username
+   ```
+
+5. Load and start:
+   ```bash
+   launchctl load ~/Library/LaunchAgents/com.github.peetzweg.status-saver.plist
+   launchctl start com.github.peetzweg.status-saver
+   ```
+
+6. Follow logs:
+   ```bash
+   tail -f ~/Library/Logs/status-saver.log
+   ```
+
+To stop / unload:
+```bash
+launchctl unload ~/Library/LaunchAgents/com.github.peetzweg.status-saver.plist
+```
+
+**Caveat: App Nap.** macOS may idle the process while the Mac is locked.
+The bundled plist sets `LegacyTimers=true` to reduce this but doesn't
+eliminate it. For a truly always-on service, run on a Linux server instead
+or switch to a LaunchDaemon (requires root).
+
+### Migration from v0.1.x
+
+v0.2.0 consolidates the three binaries (`status-saver`, `status-saver-pair`,
+`status-saver-rotate`) into a single `status-saver` with subcommands. To
+upgrade:
+
+1. Remove the old binaries:
+   ```bash
+   sudo rm -f /usr/local/bin/status-saver-pair /usr/local/bin/status-saver-rotate
+   ```
+2. Re-install the systemd unit files from `deploy/systemd/` — their
+   `ExecStart=` lines now include the subcommand argument. If you have
+   custom units, update them to `status-saver run` and `status-saver rotate`.
+3. Reload: `sudo systemctl daemon-reload && sudo systemctl restart status-saver.service`.
+4. CLI invocations take a subcommand now:
+   `status-saver pair` / `status-saver rotate` instead of the separate binaries.
+
+### Troubleshooting
+
+- **`daemon keeps exiting with status 1`** — WhatsApp force-logged out the
+  session (device removed from the phone, account banned). The unit sets
+  `RestartPreventExitStatus=1` so systemd doesn't loop. Re-run
+  `status-saver pair` manually.
+- **Build fails with `C compiler "gcc" not found`** — missing
+  `build-essential` on Ubuntu/Debian, or missing Xcode CLT on macOS.
+- **`no Go files in <dir>`** — you ran `go build` without the package path.
+  Use `make build` or pass `./cmd/...`.
 
 ## Configuration
 
@@ -88,7 +232,7 @@ mode `0750`. Full example with comments: `config.example.yaml`.
 ## Pairing
 
 ```
-status-saver pair --config ./config.yaml
+status-saver pair --config /etc/status-saver/config.yaml
 ```
 
 QR codes scroll by in the terminal. On the secondary phone:
@@ -193,28 +337,6 @@ Set `metrics_addr: "127.0.0.1:9090"` to expose:
 Endpoints are **unauthenticated** — bind only to `127.0.0.1` (or behind an
 auth proxy). Leave `metrics_addr` empty to disable (default).
 
-## Building from source
-
-```
-make build      # CGO_ENABLED=1 go build -o bin/ ./cmd/...  → bin/status-saver
-make test       # go test -race on all packages
-make lint       # gofmt + vet + golangci-lint (skipped if not installed)
-make vuln       # govulncheck on module + transitive deps
-make install    # go install ./cmd/... (to $GOBIN)
-make clean
-make help       # full target list
-```
-
-Requirements:
-
-- Go 1.25+
-- C compiler (for `github.com/mattn/go-sqlite3` through CGO). On Ubuntu:
-  `apt install build-essential`.
-
-If CGO is unavailable on the target host, swapping in `modernc.org/sqlite`
-(pure Go) is a small patch tracked at
-[issue #12](https://github.com/peetzweg/status-saver/issues/12).
-
 ## Architecture
 
 ```
@@ -253,7 +375,7 @@ internal/
 |-- metrics/    # /health + /metrics recorder
 `-- rotate/     # retention walker
 
-deploy/systemd/ # .service + .timer units for Linux (see deploy/INSTALL.md)
+deploy/systemd/ # .service + .timer units for Linux
 deploy/launchd/ # macOS LaunchAgent plist template
 ```
 
@@ -340,9 +462,13 @@ to a dedicated user.
 ## Development
 
 ```
-make test       # unit tests with race detector
-make lint       # fmt + vet + golangci-lint
-make vuln       # govulncheck
+make build      # CGO_ENABLED=1 go build -o bin/ ./cmd/...
+make test       # go test -race ./cmd/... ./internal/...
+make lint       # gofmt + vet + golangci-lint (skipped if not installed)
+make vuln       # govulncheck on module + transitive deps
+make install    # go install ./cmd/...  (into $GOBIN)
+make clean      # remove ./bin and ./dist
+make help       # full target list
 ```
 
 Test coverage as of v0.2.0:
@@ -374,8 +500,9 @@ Test coverage as of v0.2.0:
 
 Tagged releases ship a single Linux amd64 tarball on the
 [Releases page](https://github.com/peetzweg/status-saver/releases) containing
-the `status-saver` binary, systemd units, example config, INSTALL.md, and
-LICENSE. Verify with `checksums.txt`, extract, follow `deploy/INSTALL.md`.
+the `status-saver` binary, systemd units, example config, README, and
+LICENSE. Verify with `checksums.txt`, extract, follow the
+[Install](#install) steps above.
 
 Other platforms (macOS, Linux arm64): build from source. Multi-arch
 release builds are blocked on

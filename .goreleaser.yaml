@@ -32,8 +32,8 @@ archives:
       - LICENSE
       - CHANGELOG.md
       - config.example.yaml
-      - deploy/INSTALL.md
       - deploy/systemd/*
+      - deploy/launchd/*
 
 checksum:
   name_template: "checksums.txt"
