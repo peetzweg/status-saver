@@ -521,13 +521,13 @@ Same flow as Changesets in the JS/TS world, adapted for Go:
 4. `goreleaser` runs on the same workflow and uploads
    `status-saver_X.Y.Z_linux_amd64.tar.gz` + `checksums.txt` as assets.
 
-Version bumping in 0.x (configured in `release-please-config.json`):
+Version bumping (standard semver, configured in `release-please-config.json`):
 
 | Commit type | Bump |
 |---|---|
-| `feat:` | patch (0.1.0 → 0.1.1) |
-| `fix:` | patch (0.1.0 → 0.1.1) |
-| `feat!:` / `BREAKING CHANGE:` footer | minor (0.1.0 → 0.2.0) |
+| `feat:` | minor (1.0.0 → 1.1.0) |
+| `fix:` | patch (1.0.0 → 1.0.1) |
+| `feat!:` / `BREAKING CHANGE:` footer | major (1.0.0 → 2.0.0) |
 | `chore:` / `docs:` / `test:` / `ci:` / `refactor:` | none (listed in changelog) |
 
 Recognised commit types live in
