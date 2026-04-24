@@ -1,7 +1,7 @@
-// Command status-saver-pair performs a one-shot QR pairing against WhatsApp
-// and writes the resulting session into the configured SQLite store. Run this
-// interactively on the server (or via ssh) before starting the daemon.
-package main
+// Package pair implements the `status-saver pair` subcommand — a one-shot
+// interactive QR pairing that writes the resulting session into the
+// configured SQLite store.
+package pair
 
 import (
 	"context"
@@ -27,25 +27,36 @@ import (
 // Disconnecting sooner leaves the phone stuck on "pairing…".
 const postPairGrace = 30 * time.Second
 
-func main() {
-	configPath := flag.String("config", "/etc/status-saver/config.yaml", "path to YAML config")
-	force := flag.Bool("force", false, "delete existing session.db and re-pair from scratch")
-	flag.Parse()
+// Run is the entry point for `status-saver pair`. Returns an exit code.
+func Run(args []string) int {
+	fs := flag.NewFlagSet("pair", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintln(fs.Output(), "Usage: status-saver pair [flags]")
+		fmt.Fprintln(fs.Output())
+		fmt.Fprintln(fs.Output(), "Interactive QR pairing against a WhatsApp account. Prints QR")
+		fmt.Fprintln(fs.Output(), "codes to the terminal until the phone scans one.")
+		fmt.Fprintln(fs.Output())
+		fs.PrintDefaults()
+	}
+	configPath := fs.String("config", "/etc/status-saver/config.yaml", "path to YAML config")
+	force := fs.Bool("force", false, "delete existing session.db and re-pair from scratch")
+	_ = fs.Parse(args)
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "config:", err)
-		os.Exit(2)
+		return 2
 	}
 	if err := cfg.EnsureDirs(); err != nil {
 		fmt.Fprintln(os.Stderr, "ensure dirs:", err)
-		os.Exit(2)
+		return 2
 	}
 	log := logging.New(cfg.LogLevel)
 
 	if *force {
 		if err := os.Remove(cfg.SessionDB); err != nil && !os.IsNotExist(err) {
-			log.Fatal().Err(err).Str("path", cfg.SessionDB).Msg("force: remove session.db")
+			log.Error().Err(err).Str("path", cfg.SessionDB).Msg("force: remove session.db")
+			return 2
 		}
 		log.Info().Str("path", cfg.SessionDB).Msg("force: removed existing session.db — starting fresh")
 	}
@@ -55,7 +66,8 @@ func main() {
 
 	c, err := wa.Open(ctx, cfg.SessionDB, log)
 	if err != nil {
-		log.Fatal().Err(err).Msg("open whatsmeow client")
+		log.Error().Err(err).Msg("open whatsmeow client")
+		return 2
 	}
 	defer c.Close()
 
@@ -63,15 +75,17 @@ func main() {
 		log.Info().
 			Str("jid", c.WA.Store.ID.String()).
 			Msg("already paired — pass --force to delete the session and re-pair")
-		return
+		return 0
 	}
 
 	qrChan, err := c.WA.GetQRChannel(ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("get qr channel")
+		log.Error().Err(err).Msg("get qr channel")
+		return 2
 	}
 	if err := c.WA.Connect(); err != nil {
-		log.Fatal().Err(err).Msg("connect")
+		log.Error().Err(err).Msg("connect")
+		return 2
 	}
 
 	fmt.Println()
@@ -81,7 +95,8 @@ func main() {
 	fmt.Println()
 
 	if err := waitForPairing(ctx, qrChan); err != nil {
-		log.Fatal().Err(err).Msg("pairing failed")
+		log.Error().Err(err).Msg("pairing failed")
+		return 2
 	}
 	log.Info().
 		Str("jid", c.WA.Store.ID.String()).
@@ -92,6 +107,7 @@ func main() {
 	defer graceCancel()
 	<-graceCtx.Done()
 	log.Info().Msg("pairing complete — session stored, disconnecting")
+	return 0
 }
 
 func waitForPairing(ctx context.Context, qrChan <-chan whatsmeow.QRChannelItem) error {

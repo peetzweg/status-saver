@@ -4,7 +4,7 @@
 # Where decrypted status media and metadata JSON files are written.
 data_dir: /var/lib/status-saver/data
 
-# whatsmeow device-store SQLite DB (created by status-saver-pair on first pairing).
+# whatsmeow device-store SQLite DB (created by `status-saver pair` on first pairing).
 session_db: /var/lib/status-saver/session.db
 
 # Dedup index — tracks seen status messages so restarts are idempotent.

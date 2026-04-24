@@ -1,6 +1,5 @@
 # Binaries
 /status-saver
-/status-saver-pair
 /bin/
 
 # Go build / test artifacts
