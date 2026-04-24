@@ -16,6 +16,14 @@ linters:
     - misspell
     - staticcheck
     - unused
+  settings:
+    errcheck:
+      # Ignore err returns from user-facing print helpers. If stderr is
+      # broken we can't do anything about it while printing usage/errors.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
   exclusions:
     # Local clones + test tmp; not our code to lint.
     paths:
