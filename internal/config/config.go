@@ -9,11 +9,12 @@ import (
 )
 
 type Config struct {
-	DataDir       string `yaml:"data_dir"`
-	SessionDB     string `yaml:"session_db"`
-	IndexDB       string `yaml:"index_db"`
+	DataDir   string `yaml:"data_dir"`
+	SessionDB string `yaml:"session_db"`
+	IndexDB   string `yaml:"index_db"`
+	// RetentionDays: 0 (the default) keeps everything forever. Set to a
+	// positive integer to enable the rotate subcommand's pruning.
 	RetentionDays int    `yaml:"retention_days"`
-	RotationHour  int    `yaml:"rotation_hour"`
 	LogLevel      string `yaml:"log_level"`
 	AlertWebhook  string `yaml:"alert_webhook"`
 	MetricsAddr   string `yaml:"metrics_addr"`
@@ -25,8 +26,10 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("read config %s: %w", path, err)
 	}
 	cfg := &Config{
-		RetentionDays: 90,
-		RotationHour:  4,
+		// Retention is opt-in. People opt into this tool to keep data; we
+		// don't delete by default — they configure a positive number of
+		// days if they want rotation.
+		RetentionDays: 0,
 		LogLevel:      "info",
 	}
 	if err := yaml.Unmarshal(raw, cfg); err != nil {
@@ -50,9 +53,6 @@ func (c *Config) validate() error {
 	}
 	if c.RetentionDays < 0 {
 		return fmt.Errorf("retention_days must be >= 0")
-	}
-	if c.RotationHour < 0 || c.RotationHour > 23 {
-		return fmt.Errorf("rotation_hour must be 0..23")
 	}
 	c.DataDir = filepath.Clean(c.DataDir)
 	c.SessionDB = filepath.Clean(c.SessionDB)
