@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/peetzweg/status-saver/compare/v0.1.1...v0.2.0) (2026-04-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* consolidate three binaries into a single status-saver CLI
+
+### Features
+
+* consolidate three binaries into a single status-saver CLI ([2381a0c](https://github.com/peetzweg/status-saver/commit/2381a0c441928ff966f3aa49b241a87d83804d45))
+
 ## [0.1.1](https://github.com/peetzweg/status-saver/compare/v0.1.0...v0.1.1) (2026-04-23)
 
 
