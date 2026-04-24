@@ -102,7 +102,15 @@ Verify:
    sudo useradd --system --home /var/lib/status-saver --shell /usr/sbin/nologin status-saver
    ```
 
-2. Place the binary and config:
+2. Create the state directory. The systemd unit's `StateDirectory=` would
+   create it automatically on `systemctl start`, but the interactive
+   `status-saver pair` we run in step 5 runs outside systemd and the
+   unprivileged user can't create paths under `/var/lib/` itself:
+   ```bash
+   sudo install -d -o status-saver -g status-saver -m 0750 /var/lib/status-saver
+   ```
+
+3. Place the binary and config:
    ```bash
    sudo install -m 0755 bin/status-saver /usr/local/bin/
    sudo mkdir -p /etc/status-saver
@@ -110,7 +118,7 @@ Verify:
    sudo chown root:status-saver /etc/status-saver/config.yaml
    ```
 
-3. Install systemd units:
+4. Install systemd units:
    ```bash
    sudo install -m 0644 deploy/systemd/status-saver.service        /etc/systemd/system/
    sudo install -m 0644 deploy/systemd/status-saver-rotate.service /etc/systemd/system/
@@ -118,12 +126,12 @@ Verify:
    sudo systemctl daemon-reload
    ```
 
-4. Pair the WhatsApp account (interactive — see [Pairing](#pairing)):
+5. Pair the WhatsApp account (interactive — see [Pairing](#pairing)):
    ```bash
    sudo -u status-saver status-saver pair --config /etc/status-saver/config.yaml
    ```
 
-5. Start the daemon and enable the rotation timer:
+6. Start the daemon and enable the rotation timer:
    ```bash
    sudo systemctl enable --now status-saver.service
    sudo systemctl enable --now status-saver-rotate.timer
@@ -203,6 +211,12 @@ upgrade:
 
 ### Troubleshooting
 
+- **`mkdir /var/lib/status-saver/data: permission denied`** during pair —
+  you skipped install step 2 (create `/var/lib/status-saver` owned by the
+  `status-saver` user). Run:
+  ```bash
+  sudo install -d -o status-saver -g status-saver -m 0750 /var/lib/status-saver
+  ```
 - **`daemon keeps exiting with status 1`** — WhatsApp force-logged out the
   session (device removed from the phone, account banned). The unit sets
   `RestartPreventExitStatus=1` so systemd doesn't loop. Re-run
@@ -219,15 +233,21 @@ upgrade:
 data_dir:       /var/lib/status-saver/data
 session_db:     /var/lib/status-saver/session.db
 index_db:       /var/lib/status-saver/index.db
-retention_days: 90                  # 0 = keep forever
-rotation_hour:  4                   # informational; actual schedule is in the timer
+retention_days: 0                   # 0 (default) = keep forever; set N>0 to prune via `status-saver rotate`
 log_level:      info                # trace|debug|info|warn|error
 alert_webhook:  ""                  # optional POST-on-LoggedOut (ntfy.sh / Slack)
 metrics_addr:   ""                  # optional "127.0.0.1:9090" for /health + /metrics
 ```
 
-All paths must be absolute. Parent directories are created automatically with
-mode `0750`. Full example with comments: `config.example.yaml`.
+All paths must be absolute. The grandparent directory (e.g.
+`/var/lib/status-saver`) must exist and be owned by the daemon user
+(install step 2 in the Linux walkthrough); `EnsureDirs` creates the
+leaf subdirectories on startup. Full example with comments:
+`config.example.yaml`.
+
+The rotation *schedule* is **not** in the config — it lives in the systemd
+timer (`deploy/systemd/status-saver-rotate.timer`, default daily at 04:00
+local time) or whatever scheduler you point at `status-saver rotate`.
 
 ## Pairing
 
@@ -297,14 +317,23 @@ JSON sidecar schema (all fields optional except `msg_id`, `sender_jid`,
 
 ### Retention
 
-The `status-saver-rotate.timer` unit fires `status-saver rotate` daily at
-04:00 local time. It deletes any file under `<dataDir>/<contact>/` whose
-YYYY-MM-DD prefix is older than `retention_days`, removes contact folders
-that end up empty, and prunes matching rows from `index.db`. Files that
-don't start with `YYYY-MM-DD_` are left alone. `retention_days: 0` disables
-pruning entirely.
+`status-saver rotate` deletes any file under `<dataDir>/<contact>/` whose
+YYYY-MM-DD prefix is older than the configured retention window, removes
+contact folders that end up empty, and prunes matching rows from
+`index.db`. Files that don't start with `YYYY-MM-DD_` are left alone.
 
-Trigger manually: `sudo systemctl start status-saver-rotate.service`.
+Retention is **off by default** — the config's `retention_days: 0` means
+"keep everything forever". Opt in by setting a positive integer.
+
+The rotate schedule is owned by whatever invokes the subcommand:
+
+- **Bundled**: `deploy/systemd/status-saver-rotate.timer` fires daily at
+  04:00 local time. Edit the `OnCalendar=` line to change cadence.
+- **Manual**: `sudo systemctl start status-saver-rotate.service` runs
+  one pass immediately.
+- **Ad-hoc with override**: `status-saver rotate --retention-days 7`
+  runs one pass with a different retention window than config specifies
+  (useful for one-off cleanups without editing config).
 
 ## Observability
 
