@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/peetzweg/status-saver/compare/v1.0.0...v1.1.0) (2026-04-27)
+
+
+### Features
+
+* **config:** retention opt-in by default, drop cosmetic rotation_hour ([9ef6fa7](https://github.com/peetzweg/status-saver/commit/9ef6fa70082c95d30a723c7a7e54bde728da1e7a))
+* **rotate:** --retention-days CLI override for ad-hoc pruning ([47daee4](https://github.com/peetzweg/status-saver/commit/47daee4f78f57e107d584a183e54db2160f43a07))
+
 ## [1.0.0](https://github.com/peetzweg/status-saver/compare/v0.1.1...v1.0.0) (2026-04-24)
 
 
